@@ -1,6 +1,7 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
 app.use(cors());
@@ -8,10 +9,10 @@ app.use(express.json());
 
 // Create a MySQL connection pool
 const pool = mysql.createPool({
-    host: 'db',
-    user: 'root',
-    password: 'rootpassword',
-    database: 'restaurant_db',
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
