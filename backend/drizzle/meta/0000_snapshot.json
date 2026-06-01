@@ -1,0 +1,1197 @@
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "prevId": "",
+  "version": "5",
+  "dialect": "mysql",
+  "tables": {
+    "categories": {
+      "name": "categories",
+      "columns": {
+        "category_id": {
+          "autoincrement": true,
+          "name": "category_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category_name": {
+          "autoincrement": false,
+          "name": "category_name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "compositePrimaryKeys": {
+        "categories_category_id": {
+          "name": "categories_category_id",
+          "columns": [
+            "category_id"
+          ]
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "import_details": {
+      "name": "import_details",
+      "columns": {
+        "import_detail_id": {
+          "autoincrement": true,
+          "name": "import_detail_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "import_id": {
+          "autoincrement": false,
+          "name": "import_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingredient_id": {
+          "autoincrement": false,
+          "name": "ingredient_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "received_quantity": {
+          "autoincrement": false,
+          "name": "received_quantity",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cost_price": {
+          "autoincrement": false,
+          "name": "cost_price",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expiry_date": {
+          "autoincrement": false,
+          "name": "expiry_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "compositePrimaryKeys": {
+        "import_details_import_detail_id": {
+          "name": "import_details_import_detail_id",
+          "columns": [
+            "import_detail_id"
+          ]
+        }
+      },
+      "indexes": {
+        "import_id": {
+          "name": "import_id",
+          "columns": [
+            "import_id"
+          ],
+          "isUnique": false
+        },
+        "ingredient_id": {
+          "name": "ingredient_id",
+          "columns": [
+            "ingredient_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "import_details_ibfk_1": {
+          "name": "import_details_ibfk_1",
+          "tableFrom": "import_details",
+          "tableTo": "imports",
+          "columnsFrom": [
+            "import_id"
+          ],
+          "columnsTo": [
+            "import_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "import_details_ibfk_2": {
+          "name": "import_details_ibfk_2",
+          "tableFrom": "import_details",
+          "tableTo": "ingredients",
+          "columnsFrom": [
+            "ingredient_id"
+          ],
+          "columnsTo": [
+            "ingredient_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "imports": {
+      "name": "imports",
+      "columns": {
+        "import_id": {
+          "autoincrement": true,
+          "name": "import_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order_id": {
+          "autoincrement": false,
+          "name": "order_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "import_date": {
+          "default": "(CURRENT_TIMESTAMP)",
+          "autoincrement": false,
+          "name": "import_date",
+          "type": "datetime",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "received_by": {
+          "autoincrement": false,
+          "name": "received_by",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "remark": {
+          "autoincrement": false,
+          "name": "remark",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "compositePrimaryKeys": {
+        "imports_import_id": {
+          "name": "imports_import_id",
+          "columns": [
+            "import_id"
+          ]
+        }
+      },
+      "indexes": {
+        "order_id": {
+          "name": "order_id",
+          "columns": [
+            "order_id"
+          ],
+          "isUnique": false
+        },
+        "received_by": {
+          "name": "received_by",
+          "columns": [
+            "received_by"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "imports_ibfk_1": {
+          "name": "imports_ibfk_1",
+          "tableFrom": "imports",
+          "tableTo": "suppliers_orders",
+          "columnsFrom": [
+            "order_id"
+          ],
+          "columnsTo": [
+            "supplier_order_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "imports_ibfk_2": {
+          "name": "imports_ibfk_2",
+          "tableFrom": "imports",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "received_by"
+          ],
+          "columnsTo": [
+            "staff_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "ingredients": {
+      "name": "ingredients",
+      "columns": {
+        "ingredient_id": {
+          "autoincrement": true,
+          "name": "ingredient_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingredient_name": {
+          "autoincrement": false,
+          "name": "ingredient_name",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stock_quantity": {
+          "default": "'0.00'",
+          "autoincrement": false,
+          "name": "stock_quantity",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unit": {
+          "autoincrement": false,
+          "name": "unit",
+          "type": "enum('kg','g','pcs')",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cost_per_unit": {
+          "autoincrement": false,
+          "name": "cost_per_unit",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "min_thereshold": {
+          "autoincrement": false,
+          "name": "min_thereshold",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "supplier_id": {
+          "autoincrement": false,
+          "name": "supplier_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "compositePrimaryKeys": {
+        "ingredients_ingredient_id": {
+          "name": "ingredients_ingredient_id",
+          "columns": [
+            "ingredient_id"
+          ]
+        }
+      },
+      "indexes": {
+        "supplier_id": {
+          "name": "supplier_id",
+          "columns": [
+            "supplier_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "ingredients_ibfk_1": {
+          "name": "ingredients_ibfk_1",
+          "tableFrom": "ingredients",
+          "tableTo": "suppliers",
+          "columnsFrom": [
+            "supplier_id"
+          ],
+          "columnsTo": [
+            "supplier_id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "menus": {
+      "name": "menus",
+      "columns": {
+        "menu_id": {
+          "autoincrement": true,
+          "name": "menu_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "menu_name": {
+          "autoincrement": false,
+          "name": "menu_name",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category_id": {
+          "autoincrement": false,
+          "name": "category_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price": {
+          "autoincrement": false,
+          "name": "price",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "availability": {
+          "default": 1,
+          "autoincrement": false,
+          "name": "availability",
+          "type": "tinyint(1)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "compositePrimaryKeys": {
+        "menus_menu_id": {
+          "name": "menus_menu_id",
+          "columns": [
+            "menu_id"
+          ]
+        }
+      },
+      "indexes": {
+        "category_id": {
+          "name": "category_id",
+          "columns": [
+            "category_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "menus_ibfk_1": {
+          "name": "menus_ibfk_1",
+          "tableFrom": "menus",
+          "tableTo": "categories",
+          "columnsFrom": [
+            "category_id"
+          ],
+          "columnsTo": [
+            "category_id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "order_items": {
+      "name": "order_items",
+      "columns": {
+        "order_item_id": {
+          "autoincrement": true,
+          "name": "order_item_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order_id": {
+          "autoincrement": false,
+          "name": "order_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "menu_id": {
+          "autoincrement": false,
+          "name": "menu_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quantity": {
+          "autoincrement": false,
+          "name": "quantity",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total_price": {
+          "autoincrement": false,
+          "name": "total_price",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "compositePrimaryKeys": {
+        "order_items_order_item_id": {
+          "name": "order_items_order_item_id",
+          "columns": [
+            "order_item_id"
+          ]
+        }
+      },
+      "indexes": {
+        "menu_id": {
+          "name": "menu_id",
+          "columns": [
+            "menu_id"
+          ],
+          "isUnique": false
+        },
+        "order_id": {
+          "name": "order_id",
+          "columns": [
+            "order_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "order_items_ibfk_1": {
+          "name": "order_items_ibfk_1",
+          "tableFrom": "order_items",
+          "tableTo": "orders",
+          "columnsFrom": [
+            "order_id"
+          ],
+          "columnsTo": [
+            "order_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "order_items_ibfk_2": {
+          "name": "order_items_ibfk_2",
+          "tableFrom": "order_items",
+          "tableTo": "menus",
+          "columnsFrom": [
+            "menu_id"
+          ],
+          "columnsTo": [
+            "menu_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "orders": {
+      "name": "orders",
+      "columns": {
+        "order_id": {
+          "autoincrement": true,
+          "name": "order_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "autoincrement": false,
+          "name": "session_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "staff_id": {
+          "autoincrement": false,
+          "name": "staff_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ordered_at": {
+          "default": "(CURRENT_TIMESTAMP)",
+          "autoincrement": false,
+          "name": "ordered_at",
+          "type": "datetime",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "default": "'Pending'",
+          "autoincrement": false,
+          "name": "status",
+          "type": "enum('Pending','Preparing','Served')",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "compositePrimaryKeys": {
+        "orders_order_id": {
+          "name": "orders_order_id",
+          "columns": [
+            "order_id"
+          ]
+        }
+      },
+      "indexes": {
+        "session_id": {
+          "name": "session_id",
+          "columns": [
+            "session_id"
+          ],
+          "isUnique": false
+        },
+        "staff_id": {
+          "name": "staff_id",
+          "columns": [
+            "staff_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "orders_ibfk_1": {
+          "name": "orders_ibfk_1",
+          "tableFrom": "orders",
+          "tableTo": "service_sessions",
+          "columnsFrom": [
+            "session_id"
+          ],
+          "columnsTo": [
+            "session_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "orders_ibfk_2": {
+          "name": "orders_ibfk_2",
+          "tableFrom": "orders",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "staff_id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "recipes": {
+      "name": "recipes",
+      "columns": {
+        "recipe_id": {
+          "autoincrement": true,
+          "name": "recipe_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "menu_id": {
+          "autoincrement": false,
+          "name": "menu_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ingredient_id": {
+          "autoincrement": false,
+          "name": "ingredient_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quantity_used": {
+          "autoincrement": false,
+          "name": "quantity_used",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "compositePrimaryKeys": {
+        "recipes_recipe_id": {
+          "name": "recipes_recipe_id",
+          "columns": [
+            "recipe_id"
+          ]
+        }
+      },
+      "indexes": {
+        "ingredient_id": {
+          "name": "ingredient_id",
+          "columns": [
+            "ingredient_id"
+          ],
+          "isUnique": false
+        },
+        "menu_id": {
+          "name": "menu_id",
+          "columns": [
+            "menu_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "recipes_ibfk_1": {
+          "name": "recipes_ibfk_1",
+          "tableFrom": "recipes",
+          "tableTo": "menus",
+          "columnsFrom": [
+            "menu_id"
+          ],
+          "columnsTo": [
+            "menu_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "recipes_ibfk_2": {
+          "name": "recipes_ibfk_2",
+          "tableFrom": "recipes",
+          "tableTo": "ingredients",
+          "columnsFrom": [
+            "ingredient_id"
+          ],
+          "columnsTo": [
+            "ingredient_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "sales": {
+      "name": "sales",
+      "columns": {
+        "billing_id": {
+          "autoincrement": true,
+          "name": "billing_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "autoincrement": false,
+          "name": "session_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_amount": {
+          "autoincrement": false,
+          "name": "total_amount",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "paid_at": {
+          "default": "(CURRENT_TIMESTAMP)",
+          "autoincrement": false,
+          "name": "paid_at",
+          "type": "datetime",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "compositePrimaryKeys": {
+        "sales_billing_id": {
+          "name": "sales_billing_id",
+          "columns": [
+            "billing_id"
+          ]
+        }
+      },
+      "indexes": {
+        "session_id": {
+          "name": "session_id",
+          "columns": [
+            "session_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "sales_ibfk_1": {
+          "name": "sales_ibfk_1",
+          "tableFrom": "sales",
+          "tableTo": "service_sessions",
+          "columnsFrom": [
+            "session_id"
+          ],
+          "columnsTo": [
+            "session_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "service_sessions": {
+      "name": "service_sessions",
+      "columns": {
+        "session_id": {
+          "autoincrement": true,
+          "name": "session_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_type": {
+          "autoincrement": false,
+          "name": "session_type",
+          "type": "enum('dine-in','takeaway')",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "table_number": {
+          "autoincrement": false,
+          "name": "table_number",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "staff_id": {
+          "autoincrement": false,
+          "name": "staff_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "default": "(CURRENT_TIMESTAMP)",
+          "autoincrement": false,
+          "name": "started_at",
+          "type": "datetime",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ended_at": {
+          "autoincrement": false,
+          "name": "ended_at",
+          "type": "datetime",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "default": "'Active'",
+          "autoincrement": false,
+          "name": "status",
+          "type": "enum('Active','Completed')",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "compositePrimaryKeys": {
+        "service_sessions_session_id": {
+          "name": "service_sessions_session_id",
+          "columns": [
+            "session_id"
+          ]
+        }
+      },
+      "indexes": {
+        "staff_id": {
+          "name": "staff_id",
+          "columns": [
+            "staff_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "service_sessions_ibfk_1": {
+          "name": "service_sessions_ibfk_1",
+          "tableFrom": "service_sessions",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "staff_id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "staff": {
+      "name": "staff",
+      "columns": {
+        "staff_id": {
+          "autoincrement": true,
+          "name": "staff_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_name": {
+          "autoincrement": false,
+          "name": "first_name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_name": {
+          "autoincrement": false,
+          "name": "last_name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone": {
+          "autoincrement": false,
+          "name": "phone",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role": {
+          "default": "'employee'",
+          "autoincrement": false,
+          "name": "role",
+          "type": "enum('employee','manager')",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "username": {
+          "autoincrement": false,
+          "name": "username",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password": {
+          "autoincrement": false,
+          "name": "password",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "compositePrimaryKeys": {
+        "staff_staff_id": {
+          "name": "staff_staff_id",
+          "columns": [
+            "staff_id"
+          ]
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "uniqueConstraints": {
+        "username": {
+          "name": "username",
+          "columns": [
+            "username"
+          ]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "supplier_order_details": {
+      "name": "supplier_order_details",
+      "columns": {
+        "supplier_order_detail_id": {
+          "autoincrement": true,
+          "name": "supplier_order_detail_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "supplier_order_id": {
+          "autoincrement": false,
+          "name": "supplier_order_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingredient_id": {
+          "autoincrement": false,
+          "name": "ingredient_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity": {
+          "autoincrement": false,
+          "name": "quantity",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_price": {
+          "autoincrement": false,
+          "name": "unit_price",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "compositePrimaryKeys": {
+        "supplier_order_details_supplier_order_detail_id": {
+          "name": "supplier_order_details_supplier_order_detail_id",
+          "columns": [
+            "supplier_order_detail_id"
+          ]
+        }
+      },
+      "indexes": {
+        "ingredient_id": {
+          "name": "ingredient_id",
+          "columns": [
+            "ingredient_id"
+          ],
+          "isUnique": false
+        },
+        "supplier_order_id": {
+          "name": "supplier_order_id",
+          "columns": [
+            "supplier_order_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "supplier_order_details_ibfk_1": {
+          "name": "supplier_order_details_ibfk_1",
+          "tableFrom": "supplier_order_details",
+          "tableTo": "suppliers_orders",
+          "columnsFrom": [
+            "supplier_order_id"
+          ],
+          "columnsTo": [
+            "supplier_order_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "supplier_order_details_ibfk_2": {
+          "name": "supplier_order_details_ibfk_2",
+          "tableFrom": "supplier_order_details",
+          "tableTo": "ingredients",
+          "columnsFrom": [
+            "ingredient_id"
+          ],
+          "columnsTo": [
+            "ingredient_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "suppliers": {
+      "name": "suppliers",
+      "columns": {
+        "supplier_id": {
+          "autoincrement": true,
+          "name": "supplier_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "supplier_name": {
+          "autoincrement": false,
+          "name": "supplier_name",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone": {
+          "autoincrement": false,
+          "name": "phone",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "address": {
+          "autoincrement": false,
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "compositePrimaryKeys": {
+        "suppliers_supplier_id": {
+          "name": "suppliers_supplier_id",
+          "columns": [
+            "supplier_id"
+          ]
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "suppliers_orders": {
+      "name": "suppliers_orders",
+      "columns": {
+        "supplier_order_id": {
+          "autoincrement": true,
+          "name": "supplier_order_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "supplier_id": {
+          "autoincrement": false,
+          "name": "supplier_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "staff_id": {
+          "autoincrement": false,
+          "name": "staff_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order_date": {
+          "default": "(CURRENT_TIMESTAMP)",
+          "autoincrement": false,
+          "name": "order_date",
+          "type": "datetime",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_amount": {
+          "default": "'0.00'",
+          "autoincrement": false,
+          "name": "total_amount",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "default": "'pending'",
+          "autoincrement": false,
+          "name": "status",
+          "type": "enum('pending','completed','cancelled')",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "compositePrimaryKeys": {
+        "suppliers_orders_supplier_order_id": {
+          "name": "suppliers_orders_supplier_order_id",
+          "columns": [
+            "supplier_order_id"
+          ]
+        }
+      },
+      "indexes": {
+        "staff_id": {
+          "name": "staff_id",
+          "columns": [
+            "staff_id"
+          ],
+          "isUnique": false
+        },
+        "supplier_id": {
+          "name": "supplier_id",
+          "columns": [
+            "supplier_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "suppliers_orders_ibfk_1": {
+          "name": "suppliers_orders_ibfk_1",
+          "tableFrom": "suppliers_orders",
+          "tableTo": "suppliers",
+          "columnsFrom": [
+            "supplier_id"
+          ],
+          "columnsTo": [
+            "supplier_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "suppliers_orders_ibfk_2": {
+          "name": "suppliers_orders_ibfk_2",
+          "tableFrom": "suppliers_orders",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "staff_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {
+      "imports": {
+        "columns": {
+          "import_date": {
+            "isDefaultAnExpression": true
+          }
+        }
+      },
+      "orders": {
+        "columns": {
+          "ordered_at": {
+            "isDefaultAnExpression": true
+          }
+        }
+      },
+      "sales": {
+        "columns": {
+          "paid_at": {
+            "isDefaultAnExpression": true
+          }
+        }
+      },
+      "service_sessions": {
+        "columns": {
+          "started_at": {
+            "isDefaultAnExpression": true
+          }
+        }
+      },
+      "suppliers_orders": {
+        "columns": {
+          "order_date": {
+            "isDefaultAnExpression": true
+          }
+        }
+      }
+    },
+    "indexes": {}
+  }
+}

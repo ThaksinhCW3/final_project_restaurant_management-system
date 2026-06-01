@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 
 module.exports = (pool) => {
-
     // GET all menus
     router.get('/', (req, res) => {
         const query = `
