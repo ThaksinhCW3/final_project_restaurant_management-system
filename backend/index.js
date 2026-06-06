@@ -21,11 +21,17 @@ const pool = mysql.createPool({
 const staffRoute = require('./routes/Staff')(pool);
 const menuRoute = require('./routes/Menu')(pool);
 const categoryRoute = require('./routes/Categories')(pool);
+const recipeRoute = require('./routes/Recipes')(pool);
+const ingredientRoute = require('./routes/Ingredients')(pool);
+const supplierRoute = require('./routes/Suppliers')(pool);
 
 // Link the files to base URLs
-app.use('/api/staff', staffRoute);
+app.use('/api/staffs', staffRoute);
 app.use('/api/menus', menuRoute);
 app.use('/api/categories', categoryRoute);
+app.use('/api/suppliers', supplierRoute);
+app.use('/api/recipes', recipeRoute);
+app.use('/api/ingredients', ingredientRoute);
 
 const PORT = 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

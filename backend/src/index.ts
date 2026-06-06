@@ -1,41 +1,43 @@
 import 'dotenv/config';
-import { drizzle } from 'drizzle-orm/mysql2';
 import { eq } from 'drizzle-orm';
-import { usersTable } from './db/schema';
-  
-const db = drizzle(process.env.DATABASE_URL!);
+import { db, pool } from './db/index';
+import { staff } from './db/schema';
 
 async function main() {
-  const user: typeof usersTable.$inferInsert = {
-    name: 'John',
-    age: 30,
-    email: 'john@example.com',
+  const username = `john.doe.${Date.now()}`;
+
+  const staffMember: typeof staff.$inferInsert = {
+    firstName: 'John',
+    lastName: 'Doe',
+    phone: '0123456789',
+    role: 'employee',
+    username,
+    password: 'demo-password',
   };
 
-  await db.insert(usersTable).values(user);
-  console.log('New user created!')
+  await db.insert(staff).values(staffMember);
+  console.log('New staff member created!');
 
-  const users = await db.select().from(usersTable);
-  console.log('Getting all users from the database: ', users)
-  /*
-  const users: {
-    id: number;
-    name: string;
-    age: number;
-    email: string;
-  }[]
-  */
+  const staffMembers = await db.select().from(staff);
+  console.log('Getting all staff members from the database: ', staffMembers);
 
   await db
-    .update(usersTable)
+    .update(staff)
     .set({
-      age: 31,
+      lastName: 'Smith',
     })
-    .where(eq(usersTable.email, user.email));
-  console.log('User info updated!')
+    .where(eq(staff.username, username));
+  console.log('Staff member info updated!');
 
-  await db.delete(usersTable).where(eq(usersTable.email, user.email));
-  console.log('User deleted!')
+  await db.delete(staff).where(eq(staff.username, username));
+  console.log('Staff member deleted!');
 }
 
-main();
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await pool.end();
+  });
