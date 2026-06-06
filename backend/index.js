@@ -17,13 +17,25 @@ const pool = mysql.createPool({
     queueLimit: 0
 });
 
-// Import the route files and pass the database pool to them
-const staffRoute = require('./routes/Staff')(pool);
-const menuRoute = require('./routes/Menu')(pool);
-const categoryRoute = require('./routes/Categories')(pool);
-const recipeRoute = require('./routes/Recipes')(pool);
-const ingredientRoute = require('./routes/Ingredients')(pool);
-const supplierRoute = require('./routes/Suppliers')(pool);
+//Inventory
+const ingredientRoute = require('./routes/inventory/Ingredients')(pool);
+const supplierRoute = require('./routes/inventory/Suppliers')(pool);
+const importRoute = require('./routes/inventory/Imports')(pool);
+const importDetailRoute = require('./routes/inventory/ImportDetails')(pool);
+const supplierOrderRoute = require('./routes/inventory/SupplierOrders')(pool);
+const supplierOrderDetailRoute = require('./routes/inventory/SupplierOrderDetails')(pool);
+//Menu
+const menuRoute = require('./routes/menu/Menus')(pool);
+const categoryRoute = require('./routes/menu/Categories')(pool);
+const recipeRoute = require('./routes/menu/Recipes')(pool);
+//Orders
+const orderRoute = require('./routes/orders/Orders')(pool);
+const orderItemRoute = require('./routes/orders/OderItems')(pool);
+const salesRoute = require('./routes/orders/Sales')(pool);
+const serviceSessionRoute = require('./routes/orders/ServiceSessions')(pool);
+//Staff
+const staffRoute = require('./routes/staff/Staff')(pool);
+
 
 // Link the files to base URLs
 app.use('/api/staffs', staffRoute);
@@ -32,6 +44,15 @@ app.use('/api/categories', categoryRoute);
 app.use('/api/suppliers', supplierRoute);
 app.use('/api/recipes', recipeRoute);
 app.use('/api/ingredients', ingredientRoute);
+app.use('/api/imports', importRoute);
+app.use('/api/import-details', importDetailRoute);
+app.use('/api/orders', orderRoute);
+app.use('/api/order-items', orderItemRoute);
+app.use('/api/sales', salesRoute);
+app.use('/api/service-sessions', serviceSessionRoute);
+app.use('/api/supplier-orders', supplierOrderRoute);
+app.use('/api/supplier-order-details', supplierOrderDetailRoute);
+
 
 const PORT = 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

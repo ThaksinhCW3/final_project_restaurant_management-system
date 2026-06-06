@@ -15,7 +15,7 @@ export const importDetailsRelations = relations(importDetails, ({one}) => ({
 export const importsRelations = relations(imports, ({one, many}) => ({
 	importDetails: many(importDetails),
 	suppliersOrder: one(suppliersOrders, {
-		fields: [imports.orderId],
+		fields: [imports.supplierOrderId],
 		references: [suppliersOrders.supplierOrderId]
 	}),
 	staff: one(staff, {

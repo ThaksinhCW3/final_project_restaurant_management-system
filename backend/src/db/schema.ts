@@ -26,13 +26,13 @@ export const importDetails = mysqlTable("import_details", {
 
 export const imports = mysqlTable("imports", {
 	importId: int("import_id").autoincrement().notNull(),
-	orderId: int("order_id").references(() => suppliersOrders.supplierOrderId),
+	supplierOrderId: int("supplier_order_id").references(() => suppliersOrders.supplierOrderId),
 	importDate: datetime("import_date", { mode: 'string'}).default(sql`(CURRENT_TIMESTAMP)`),
 	receivedBy: int("received_by").notNull().references(() => staff.staffId),
 	remark: text(),
 },
 (table) => [
-	index("order_id").on(table.orderId),
+	index("supplier_order_id").on(table.supplierOrderId),
 	index("received_by").on(table.receivedBy),
 	primaryKey({ columns: [table.importId], name: "imports_import_id"}),
 ]);
@@ -102,14 +102,14 @@ export const recipes = mysqlTable("recipes", {
 ]);
 
 export const sales = mysqlTable("sales", {
-	billingId: int("billing_id").autoincrement().notNull(),
+	saleId: int("sale_id").autoincrement().notNull(),
 	sessionId: int("session_id").references(() => serviceSessions.sessionId, { onDelete: "restrict" } ),
 	totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
 	paidAt: datetime("paid_at", { mode: 'string'}).default(sql`(CURRENT_TIMESTAMP)`),
 },
 (table) => [
 	index("session_id").on(table.sessionId),
-	primaryKey({ columns: [table.billingId], name: "sales_billing_id"}),
+	primaryKey({ columns: [table.saleId], name: "sales_sale_id"}),
 ]);
 
 export const serviceSessions = mysqlTable("service_sessions", {
