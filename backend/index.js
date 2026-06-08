@@ -29,10 +29,10 @@ const menuRoute = require('./routes/menu/Menus')(pool);
 const categoryRoute = require('./routes/menu/Categories')(pool);
 const recipeRoute = require('./routes/menu/Recipes')(pool);
 //Orders
-const orderRoute = require('./routes/orders/Orders')(pool);
-const orderItemRoute = require('./routes/orders/OderItems')(pool);
-const salesRoute = require('./routes/orders/Sales')(pool);
-const serviceSessionRoute = require('./routes/orders/ServiceSessions')(pool);
+const orderRoute = require('./routes/order/Orders')(pool);
+const orderItemRoute = require('./routes/order/OrderItems')(pool);
+const salesRoute = require('./routes/order/Sales')(pool);
+const serviceSessionRoute = require('./routes/order/ServiceSessions')(pool);
 //Staff
 const staffRoute = require('./routes/staff/Staff')(pool);
 

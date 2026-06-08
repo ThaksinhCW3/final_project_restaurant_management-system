@@ -3,7 +3,7 @@ const router = express.Router();
 
 module.exports = (pool) => {
     // GET all orders
-    router.get('/', (req, res) => {
+    router.get(['/', '/order'], (req, res) => {
         const query = `
             SELECT
                 orders.order_id,
@@ -27,7 +27,7 @@ module.exports = (pool) => {
     });
 
     // ADD order
-    router.post('/', (req, res) => {
+    router.post(['/', '/order'], (req, res) => {
         const { session_id, staff_id, status } = req.body;
         const query = 'INSERT INTO orders (session_id, staff_id, status) VALUES (?, ?, ?)';
 
@@ -41,7 +41,7 @@ module.exports = (pool) => {
     });
 
     // UPDATE order
-    router.put('/:id', (req, res) => {
+    router.put(['/:id', '/order/:id'], (req, res) => {
         const { id } = req.params;
         if (!Number.isInteger(Number(id))) {
             return res.status(400).json({ message: 'Invalid order id' });
@@ -60,7 +60,7 @@ module.exports = (pool) => {
     });
 
     // DELETE order
-    router.delete('/:id', (req, res) => {
+    router.delete(['/:id', '/order/:id'], (req, res) => {
         const { id } = req.params;
         if (!Number.isInteger(Number(id))) {
             return res.status(400).json({ message: 'Invalid order id' });

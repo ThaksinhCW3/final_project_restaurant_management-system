@@ -1,4 +1,4 @@
-import { mysqlTable, mysqlSchema, AnyMySqlColumn, primaryKey, int, varchar, index, foreignKey, decimal, date, datetime, text, mysqlEnum, unique, tinyint } from "drizzle-orm/mysql-core"
+import { mysqlTable, mysqlSchema, AnyMySqlColumn, primaryKey, int, varchar, index, foreignKey, decimal, date, datetime, text, mysqlEnum, unique, tinyint} from "drizzle-orm/mysql-core"
 import { sql } from "drizzle-orm"
 
 export const categories = mysqlTable("categories", {
@@ -32,8 +32,8 @@ export const imports = mysqlTable("imports", {
 	remark: text(),
 },
 (table) => [
-	index("supplier_order_id").on(table.supplierOrderId),
 	index("received_by").on(table.receivedBy),
+	index("supplier_order_id").on(table.supplierOrderId),
 	primaryKey({ columns: [table.importId], name: "imports_import_id"}),
 ]);
 
@@ -68,7 +68,6 @@ export const orderItems = mysqlTable("order_items", {
 	orderId: int("order_id").references(() => orders.orderId, { onDelete: "cascade" } ),
 	menuId: int("menu_id").references(() => menus.menuId, { onDelete: "restrict" } ),
 	quantity: int().notNull(),
-	totalPrice: decimal("total_price", { precision: 10, scale: 2 }).notNull(),
 },
 (table) => [
 	index("menu_id").on(table.menuId),
@@ -94,6 +93,7 @@ export const recipes = mysqlTable("recipes", {
 	menuId: int("menu_id").references(() => menus.menuId, { onDelete: "cascade" } ),
 	ingredientId: int("ingredient_id").references(() => ingredients.ingredientId, { onDelete: "cascade" } ),
 	quantityUsed: decimal("quantity_used", { precision: 10, scale: 2 }).notNull(),
+	unit: mysqlEnum(['kg','g','pcs']).default('pcs').notNull(),
 },
 (table) => [
 	index("ingredient_id").on(table.ingredientId),
@@ -102,14 +102,14 @@ export const recipes = mysqlTable("recipes", {
 ]);
 
 export const sales = mysqlTable("sales", {
-	saleId: int("sale_id").autoincrement().notNull(),
+	salesId: int("sales_id").autoincrement().notNull(),
 	sessionId: int("session_id").references(() => serviceSessions.sessionId, { onDelete: "restrict" } ),
 	totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
 	paidAt: datetime("paid_at", { mode: 'string'}).default(sql`(CURRENT_TIMESTAMP)`),
 },
 (table) => [
 	index("session_id").on(table.sessionId),
-	primaryKey({ columns: [table.saleId], name: "sales_sale_id"}),
+	primaryKey({ columns: [table.salesId], name: "sales_sales_id"}),
 ]);
 
 export const serviceSessions = mysqlTable("service_sessions", {

@@ -3,7 +3,7 @@ const router = express.Router();
 
 module.exports = (pool) => {
     // GET all import
-    router.get('/', (req, res) => {
+    router.get(['/', "/order"], (req, res) => {
         const query = `
             SELECT
             order_items.order_item_id,
@@ -24,7 +24,7 @@ module.exports = (pool) => {
     });
 
     //ADD order item
-    router.post('/', (req, res) => {
+    router.post(['/', "/order"], (req, res) => {
         const { order_id, menu_id, quantity } = req.body;
         const query = `
             INSERT INTO order_items (order_id, menu_id, quantity) VALUES (?, ?, ?)`;
@@ -39,7 +39,7 @@ module.exports = (pool) => {
     });
 
     //UPDATE order item
-    router.put('/:id', (req, res) => {
+    router.put(['/:id', '/:id/order'], (req, res) => {
         const { id } = req.params;
         const { order_id, menu_id, quantity } = req.body;
         const query = `
@@ -55,7 +55,7 @@ module.exports = (pool) => {
     });
 
     // DELETE order item
-    router.delete('/:id', (req, res) => {
+    router.delete(['/:id', '/:id/order'], (req, res) => {
         const { id } = req.params;
         const query = `
             DELETE FROM order_items WHERE order_item_id = ?`;
