@@ -12,8 +12,8 @@ interface POSProps {
   setShowAddItems: (show: boolean) => void;
   addItem: (mid: number) => void;
   rmItem: (mid: number) => void;
-  openTable: (id: number) => void;
-  checkout: (id: number) => void;
+  openTable: (id: number) => void | Promise<void>;
+  checkout: (id: number) => void | Promise<void>;
 }
 
 export default function POS({

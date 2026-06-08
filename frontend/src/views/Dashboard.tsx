@@ -12,14 +12,16 @@ interface DashboardProps {
 
 export default function Dashboard({ sales, tables, menu }: DashboardProps) {
   const occupied = tables.filter(t => t.status === "occupied").length;
+  const revenueToday = sales.filter(s => s.date === today()).reduce((sum, sale) => sum + sale.total, 0);
+  const openMenus = menu.filter(item => item.ok).length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <StatCard label="ລາຍຮັບມື້ນີ້" value={kip(sales.filter(s => s.date === today()).reduce((a, s) => a + s.total, 0) || 1983000)} sub="↑ 12% ຈາກມື້ວານ" color={C.gold} icon={DollarSign} />
-        <StatCard label="ຍອດຂາຍ" value={String(sales.length + 30)} sub="ທຸລະກຳທັງໝົດ" color={C.green} icon={ShoppingCart} />
+        <StatCard label="ລາຍຮັບມື້ນີ້" value={kip(revenueToday)} sub="ຈາກຍອດຂາຍຈິງ" color={C.gold} icon={DollarSign} />
+        <StatCard label="ຍອດຂາຍ" value={String(sales.length)} sub="ທຸລະກຳທັງໝົດ" color={C.green} icon={ShoppingCart} />
         <StatCard label="ໂຕະທີ່ໃຊ້" value={`${occupied}/${tables.length}`} sub="ໂຕະ" color={C.blue} icon={Coffee} />
-        <StatCard label="ເມນູທັງໝົດ" value={String(menu.length)} sub={`${menu.filter(m => m.ok).length} ລາຍການ ເປີດ`} color={C.amber} icon={Star} />
+        <StatCard label="ເມນູທັງໝົດ" value={String(menu.length)} sub={`${openMenus} ລາຍການ ເປີດ`} color={C.amber} icon={Star} />
       </div>
 
       <div style={{ display: "flex", gap: 18 }}>
@@ -27,7 +29,7 @@ export default function Dashboard({ sales, tables, menu }: DashboardProps) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
             <div>
               <div style={{ fontSize: 11, color: C.textMid, marginBottom: 3 }}>ລາຍຮັບ 6 ວັນທີ່ຜ່ານມາ</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display',serif" }}>3,570,000 ₭</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display',serif" }}>{kip(revenueToday)}</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(74,140,69,0.12)", border: "1px solid rgba(74,140,69,0.3)", borderRadius: 8, padding: "4px 10px" }}>
               <TrendingUp size={12} color={C.green} /><span style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>+18%</span>

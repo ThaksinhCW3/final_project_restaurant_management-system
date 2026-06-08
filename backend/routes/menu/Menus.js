@@ -5,7 +5,7 @@ module.exports = (pool) => {
     // GET all menus
     router.get('/', (req, res) => {
         const query = `
-            SELECT menus.menu_id, menus.menu_name, menus.price, menus.availability, categories.category_name 
+            SELECT menus.menu_id, menus.menu_name, menus.category_id, menus.price, menus.availability, categories.category_name 
             FROM menus 
             LEFT JOIN categories ON menus.category_id = categories.category_id
         `;

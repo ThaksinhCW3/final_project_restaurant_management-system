@@ -1,22 +1,24 @@
 import { useState, useEffect } from "react";
-import { LayoutDashboard, ShoppingCart, BarChart2, Users, Package, Utensils, ChefHat, Settings, LogOut, Search, Bell, Plus, Pencil, Trash2, CheckCircle, AlertTriangle } from "lucide-react";
-import { C, load, persist, today, now, uid, D_MENU, D_TABLES, D_SALES, D_STAFF, D_STOCK, D_SESSIONS, MENU_CATS, CHART_DATA, PIE_DATA, QR_URL, tblTotal } from "./config/constants";
+import { LayoutDashboard, ShoppingCart, BarChart2, Users, Package, Utensils, ChefHat, Settings, LogOut, Search, Bell, QrCode, Plus, Pencil, Trash2, CheckCircle, AlertTriangle } from "lucide-react";
+import { C, today, now, uid, CHART_DATA, PIE_DATA, QR_URL, tblTotal } from "./config/constants";
 import { NavBtn, Modal, Inp, Sel, Btn } from "./components/SharedUI";
 import Dashboard from "./views/Dashboard";
 import POS from "./views/POS";
 import type { MenuItem, TableItem, SaleItem, StaffItem, StockItem, SessionItem } from "./types";
+import { apiClient } from "./api/client";
 
 type Toast = { id: number; msg: string; type: "success" | "error" | "info" };
 type ModalState = { type: string; title?: string; data: any; msg?: string; onConfirm?: () => void } | null;
 
 export default function App() {
   const [view, setView] = useState<string>("dashboard");
-  const [menu, setMenu] = useState<MenuItem[]>(D_MENU);
-  const [tables, setTables] = useState<TableItem[]>(D_TABLES);
-  const [sales, setSales] = useState<SaleItem[]>(D_SALES);
-  const [staff, setStaff] = useState<StaffItem[]>(D_STAFF);
-  const [stock, setStock] = useState<StockItem[]>(D_STOCK);
-  const [sessions, setSessions] = useState<SessionItem[]>(D_SESSIONS);
+  const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [tables, setTables] = useState<TableItem[]>([]);
+  const [sales, setSales] = useState<SaleItem[]>([]);
+  const [staff, setStaff] = useState<StaffItem[]>([]);
+  const [stock, setStock] = useState<StockItem[]>([]);
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
 
   const [selTable, setSelTable] = useState<number | null>(null);
   const [activeCat, setActiveCat] = useState<string>("ທັງໝົດ");
@@ -25,6 +27,15 @@ export default function App() {
   const [modal, setModal] = useState<ModalState>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [loaded, setLoaded] = useState<boolean>(false);
+
+  const parseSessionId = (value: string | number | null | undefined): number | null => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+
+    const match = String(value ?? "").match(/(\d+)/);
+    return match ? Number(match[1]) : null;
+  };
 
   useEffect(() => {
     const el = document.createElement("link"); el.rel = "stylesheet";
@@ -35,30 +46,44 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const [m, t, s, st, sk, se] = await Promise.all([
-        load<MenuItem[]>("olay:menu", D_MENU),
-        load<TableItem[]>("olay:tables", D_TABLES),
-        load<SaleItem[]>("olay:sales", D_SALES),
-        load<StaffItem[]>("olay:staff", D_STAFF),
-        load<StockItem[]>("olay:stock", D_STOCK),
-        load<SessionItem[]>("olay:sessions", D_SESSIONS),
+      const results = await Promise.allSettled([
+        apiClient.menus.getAll(),
+        apiClient.staff.getAll(),
+        apiClient.stock.getAll(),
+        apiClient.sessions.getAll(),
+        apiClient.tables.getAll(),
+        apiClient.sales.getAll(),
+        apiClient.categories.getAll(),
       ]);
-      setMenu(m);
-      setTables(t);
-      setSales(s);
-      setStaff(st);
-      setStock(sk);
-      setSessions(se);
+
+      const [menusRes, staffRes, stockRes, sessionsRes, tablesRes, salesRes, categoriesRes] = results;
+
+      if (menusRes.status === "fulfilled") setMenu(menusRes.value || []);
+      else console.error("Failed to load menus", menusRes.reason);
+
+      if (staffRes.status === "fulfilled") setStaff(staffRes.value || []);
+      else console.error("Failed to load staff", staffRes.reason);
+
+      if (stockRes.status === "fulfilled") setStock(stockRes.value || []);
+      else console.error("Failed to load stock", stockRes.reason);
+
+      if (sessionsRes.status === "fulfilled") setSessions(sessionsRes.value || []);
+      else console.error("Failed to load sessions", sessionsRes.reason);
+
+      if (tablesRes.status === "fulfilled") setTables(tablesRes.value || []);
+      else console.error("Failed to load tables", tablesRes.reason);
+
+      if (salesRes.status === "fulfilled") setSales(salesRes.value || []);
+      else console.error("Failed to load sales", salesRes.reason);
+
+      if (categoriesRes.status === "fulfilled") setCategories(categoriesRes.value || []);
+      else console.error("Failed to load categories", categoriesRes.reason);
+
       setLoaded(true);
     })();
   }, []);
 
-  useEffect(() => { if (loaded) persist("olay:menu", menu); }, [menu, loaded]);
-  useEffect(() => { if (loaded) persist("olay:tables", tables); }, [tables, loaded]);
-  useEffect(() => { if (loaded) persist("olay:sales", sales); }, [sales, loaded]);
-  useEffect(() => { if (loaded) persist("olay:staff", staff); }, [staff, loaded]);
-  useEffect(() => { if (loaded) persist("olay:stock", stock); }, [stock, loaded]);
-  useEffect(() => { if (loaded) persist("olay:sessions", sessions); }, [sessions, loaded]);
+  // Data is now persisted via API - no need for localStorage
 
   const toast = (msg: string, type: Toast["type"] = "success") => {
     const id = Date.now();
@@ -88,38 +113,108 @@ export default function App() {
     }));
   };
 
-  const openTable = (id: number) => {
-    setTables(p => p.map(t => t.id === id ? { ...t, status: "occupied", since: now() } : t));
+  const openTable = async (id: number) => {
+    try {
+      const session = await apiClient.sessions.create({
+        sessionType: "dine-in",
+        tableNumber: id,
+        staffId: null,
+        status: "Active",
+      });
+
+      setSessions(p => [session, ...p]);
+      setTables(p => p.map(t => t.id === id ? { ...t, status: "occupied", since: now(), sessionId: parseSessionId(session.id) ?? t.sessionId ?? null } : t));
+      toast(`ເປີດໃຊ້ ${id} ສຳເລັດ`, "success");
+    } catch (err) {
+      console.error('Open table failed', err);
+      toast("ຜິດພາດ", "error");
+    }
   };
 
-  const checkout = (id: number) => {
+  const checkout = async (id: number) => {
     const table = tables.find(x => x.id === id);
     if (!table) return;
     const total = tblTotal(table, menu);
-    setSales(p => [{ id: uid(p), table: table.name, items: table.items.length, total, time: now(), date: today() }, ...p]);
-    setTables(p => p.map(x => x.id === id ? { ...x, status: "free" as const, items: [], since: null } : x));
-    setSelTable(null);
-    setShowAddItems(false);
+    try {
+      await apiClient.sales.create({
+        table: table.name,
+        items: table.items.length,
+        total,
+        time: now(),
+        date: today(),
+        sessionId: table.sessionId ?? parseSessionId(table.name),
+      });
+
+      if (table.sessionId) {
+        await apiClient.sessions.update(table.sessionId, {
+          sessionType: "dine-in",
+          tableNumber: table.id,
+          staffId: null,
+          status: "Completed",
+          endedAt: new Date().toISOString(),
+        });
+      }
+
+      setSales(p => [{ id: uid(p), table: table.name, items: table.items.length, total, time: now(), date: today(), sessionId: table.sessionId ?? null }, ...p]);
+      setTables(p => p.map(x => x.id === id ? { ...x, status: "free" as const, items: [], since: null, sessionId: null } : x));
+      if (table.sessionId) {
+        setSessions(p => p.filter(s => parseSessionId(s.id) !== table.sessionId));
+      }
+      setSelTable(null);
+      setShowAddItems(false);
+      toast(`ຊຳລະໂຕະ ${table.name} ສຳເລັດ`, "success");
+    } catch (err) {
+      console.error('Checkout failed', err);
+      toast("ຜິດພາດ", "error");
+    }
   };
 
-  const toggleOk = (id: number) => setMenu(p => p.map(m => m.id === id ? { ...m, ok: !m.ok } : m));
+  const toggleOk = async (id: number) => {
+    const item = menu.find(m => m.id === id);
+    if (!item) return;
 
-  const submitMenu = () => {
+    try {
+      await apiClient.menus.update(id, {
+        ...item,
+        ok: !item.ok,
+        categoryId: item.categoryId ?? null,
+      });
+      setMenu(p => p.map(m => m.id === id ? { ...m, ok: !m.ok } : m));
+    } catch (err) {
+      console.error('Toggle menu availability failed', err);
+      toast("ຜິດພາດ", "error");
+    }
+  };
+
+  const submitMenu = async () => {
     if (!modal?.data) return;
     const data = modal.data;
     if (!data.name || !data.price) {
       toast("ໃສ່ຂໍ້ມູນທີ່ຈໍາເປັນ", "error");
       return;
     }
-    const cleaned = { ...data, price: Number(data.price), sold: data.sold ?? 0, ok: Boolean(data.ok), emoji: data.emoji || "🍜" };
-    if (data.id) {
-      setMenu(p => p.map(m => m.id === data.id ? { ...m, ...cleaned } : m));
-      toast(`ອັບເດດ «${data.name}»`);
-    } else {
-      setMenu(p => [...p, { ...cleaned, id: uid(p) }]);
-      toast(`ເພີ່ມ «${data.name}»`);
+    const selectedCategoryName = String(data.cat ?? data.category_name ?? "");
+    const category = categories.find(c => {
+      const categoryId = c.category_id ?? c.id ?? c.categoryId;
+      const categoryName = c.category_name ?? c.categoryName ?? c.name;
+      return categoryId === data.categoryId || categoryName === selectedCategoryName;
+    });
+    const cleaned = { ...data, price: Number(data.price), sold: data.sold ?? 0, ok: Boolean(data.ok), emoji: data.emoji || "🍜", categoryId: category?.category_id ?? category?.id ?? category?.categoryId ?? null };
+    try {
+      if (data.id) {
+        await apiClient.menus.update(data.id, cleaned);
+        setMenu(p => p.map(m => m.id === data.id ? { ...m, ...cleaned } : m));
+        toast(`ອັບເດດ «${data.name}»`);
+      } else {
+        const result = await apiClient.menus.create(cleaned);
+        setMenu(p => [...p, { ...cleaned, id: result.data.menu_id }]);
+        toast(`ເພີ່ມ «${data.name}»`);
+      }
+      setModal(null);
+    } catch (err) {
+      console.error('Menu operation failed', err);
+      toast("ຜິດພາດ", "error");
     }
-    setModal(null);
   };
 
   const deleteMenu = (id: number, name: string) => setModal({
@@ -127,28 +222,41 @@ export default function App() {
     title: "ລົບເມນູ",
     msg: `ລົບ «${name}» ບໍ?`,
     data: { id },
-    onConfirm: () => {
-      setMenu(p => p.filter(m => m.id !== id));
-      toast(`ລົບ «${name}» ສຳເລັດ`, "info");
-      setModal(null);
+    onConfirm: async () => {
+      try {
+        await apiClient.menus.delete(id);
+        setMenu(p => p.filter(m => m.id !== id));
+        toast(`ລົບ «${name}» ສຳເລັດ`, "info");
+        setModal(null);
+      } catch (err) {
+        console.error('Delete failed', err);
+        toast("ຜິດພາດ", "error");
+      }
     }
   });
 
-  const submitStaff = () => {
+  const submitStaff = async () => {
     if (!modal?.data) return;
     const data = modal.data;
     if (!data.name) {
       toast("ໃສ່ຊື່", "error");
       return;
     }
-    if (data.id) {
-      setStaff(p => p.map(s => s.id === data.id ? { ...s, ...data } : s));
-      toast(`ອັບເດດ «${data.name}»`);
-    } else {
-      setStaff(p => [...p, { ...data, id: uid(p), orders: Number(data.orders || 0) }]);
-      toast(`ເພີ່ມ «${data.name}»`);
+    try {
+      if (data.id) {
+        await apiClient.staff.update(data.id, data);
+        setStaff(p => p.map(s => s.id === data.id ? { ...s, ...data } : s));
+        toast(`ອັບເດດ «${data.name}»`);
+      } else {
+        const result = await apiClient.staff.create({ ...data, orders: Number(data.orders || 0) });
+        setStaff(p => [...p, { ...data, id: result.data.staff_id, orders: Number(data.orders || 0) }]);
+        toast(`ເພີ່ມ «${data.name}»`);
+      }
+      setModal(null);
+    } catch (err) {
+      console.error('Staff operation failed', err);
+      toast("ຜິດພາດ", "error");
     }
-    setModal(null);
   };
 
   const deleteStaff = (id: number, name: string) => setModal({
@@ -156,14 +264,20 @@ export default function App() {
     title: "ລົບພະນັກ",
     msg: `ລົບ «${name}» ບໍ?`,
     data: { id },
-    onConfirm: () => {
-      setStaff(p => p.filter(s => s.id !== id));
-      toast(`ລົບ «${name}» ສຳເລັດ`, "info");
-      setModal(null);
+    onConfirm: async () => {
+      try {
+        await apiClient.staff.delete(id);
+        setStaff(p => p.filter(s => s.id !== id));
+        toast(`ລົບ «${name}» ສຳເລັດ`, "info");
+        setModal(null);
+      } catch (err) {
+        console.error('Delete failed', err);
+        toast("ຜິດພາດ", "error");
+      }
     }
   });
 
-  const submitStock = () => {
+  const submitStock = async () => {
     if (!modal?.data) return;
     const data = modal.data;
     if (!data.name || data.cur === "") {
@@ -171,14 +285,21 @@ export default function App() {
       return;
     }
     const cleaned = { ...data, cur: Number(data.cur), min: Number(data.min || 0) };
-    if (data.id) {
-      setStock(p => p.map(s => s.id === data.id ? { ...s, ...cleaned } : s));
-      toast(`ອັບເດດ «${data.name}»`);
-    } else {
-      setStock(p => [...p, { ...cleaned, id: uid(p) }]);
-      toast(`ເພີ່ມ «${data.name}»`);
+    try {
+      if (data.id) {
+        await apiClient.stock.update(data.id, cleaned);
+        setStock(p => p.map(s => s.id === data.id ? { ...s, ...cleaned } : s));
+        toast(`ອັບເດດ «${data.name}»`);
+      } else {
+        const result = await apiClient.stock.create(cleaned);
+        setStock(p => [...p, { ...cleaned, id: result.data.id }]);
+        toast(`ເພີ່ມ «${data.name}»`);
+      }
+      setModal(null);
+    } catch (err) {
+      console.error('Stock operation failed', err);
+      toast("ຜິດພາດ", "error");
     }
-    setModal(null);
   };
 
   const deleteStock = (id: number, name: string) => setModal({
@@ -186,10 +307,16 @@ export default function App() {
     title: "ລົບສິນຄ້າ",
     msg: `ລົບ «${name}» ບໍ?`,
     data: { id },
-    onConfirm: () => {
-      setStock(p => p.filter(s => s.id !== id));
-      toast(`ລົບ «${name}» ສຳເລັດ`, "info");
-      setModal(null);
+    onConfirm: async () => {
+      try {
+        await apiClient.stock.delete(id);
+        setStock(p => p.filter(s => s.id !== id));
+        toast(`ລົບ «${name}» ສຳເລັດ`, "info");
+        setModal(null);
+      } catch (err) {
+        console.error('Delete failed', err);
+        toast("ຜິດພາດ", "error");
+      }
     }
   });
 
@@ -205,18 +332,107 @@ export default function App() {
     setModal(null);
   };
 
-  const menuCategories = ["ທັງໝົດ", ...MENU_CATS];
+  const submitSession = async () => {
+    if (!modal?.data) return;
+    const data = modal.data;
+    try {
+      const created = await apiClient.sessions.create({
+        sessionType: data.sessionType ?? "dine-in",
+        tableNumber: data.tableNumber ?? null,
+        staffId: data.staffId ?? null,
+        status: "Active",
+      });
+      setSessions(p => [created, ...p]);
+      setModal(null);
+      toast(`ສ້າງ ${created.id} ສຳເລັດ`, "success");
+    } catch (err) {
+      console.error('Session creation failed', err);
+      toast("ຜິດພາດ", "error");
+    }
+  };
+
+  const requestPayment = (id: string) => {
+    setSessions(p => p.map(x => x.id === id ? { ...x, status: "pending_payment", orderStatus: null } : x));
+    toast(`ຂໍການຊໍາລະ ${id}`, "info");
+  };
+
+  const confirmPayment = async (id: string) => {
+    const session = sessions.find(x => x.id === id);
+    if (!session) return;
+    const total = session.items.reduce((sum, item) => sum + (menu.find(m => m.id === item.id)?.price ?? 0) * item.qty, 0);
+    try {
+      await apiClient.sales.create({
+        table: session.id,
+        items: session.items.length,
+        total,
+        time: now(),
+        date: today()
+      });
+      const sessionNumericId = parseSessionId(session.id);
+      if (sessionNumericId !== null) {
+        await apiClient.sessions.update(sessionNumericId, {
+          sessionType: session.sessionType ?? "dine-in",
+          tableNumber: session.tableNumber ?? null,
+          staffId: session.staffId ?? null,
+          status: "Completed",
+          endedAt: new Date().toISOString(),
+        });
+      }
+      setSales(p => [{ id: uid(p), table: session.id, items: session.items.length, total, time: now(), date: today(), sessionId: sessionNumericId }, ...p]);
+      setSessions(p => p.filter(x => x.id !== id));
+      setModal(null);
+      toast(`ຊໍາລະ ${id} ສຳເລັດ`, "success");
+    } catch (err) {
+      console.error('Payment failed', err);
+      toast("ຜິດພາດ", "error");
+    }
+  };
+
+  const cancelSession = (id: string) => setModal({
+    type: "confirm",
+    title: "ຍົກເລີກ Bill",
+    msg: `ຍົກເລີກ ${id} ຫຼື ບໍ?`,
+    data: { id },
+    onConfirm: async () => {
+      try {
+        const session = sessions.find(x => x.id === id);
+        const sessionNumericId = parseSessionId(id);
+        if (sessionNumericId !== null && session) {
+          await apiClient.sessions.update(sessionNumericId, {
+            sessionType: session.sessionType ?? "dine-in",
+            tableNumber: session.tableNumber ?? null,
+            staffId: session.staffId ?? null,
+            status: "Completed",
+            endedAt: new Date().toISOString(),
+          });
+        }
+        setSessions(p => p.filter(s => s.id !== id));
+        setModal(null);
+        toast(`ຍົກເລີກ ${id}`, "info");
+      } catch (err) {
+        console.error('Cancel failed', err);
+        toast("ຜິດພາດ", "error");
+      }
+    }
+  });
+
+  const menuCategories = ["ທັງໝົດ", ...categories.map(c => c.category_name || c.categoryName || c.name)];
+
+  const revenueTotal = sales.reduce((sum, sale) => sum + sale.total, 0);
+  const occupiedTablesCount = tables.filter(t => t.status === "occupied").length;
+  const activeBillsCount = sessions.length;
 
   const navItems = [
     { id: "dashboard", icon: LayoutDashboard, label: "ຫຼັກ" },
     { id: "pos", icon: ShoppingCart, label: "POS" },
     { id: "menu", icon: Utensils, label: "ເມນູ" },
     { id: "stock", icon: Package, label: "ຄັງ" },
+    { id: "billing", icon: QrCode, label: "Bill" },
     { id: "reports", icon: BarChart2, label: "ລາຍງານ" },
     { id: "staff", icon: Users, label: "ພະນັກ" },
   ];
 
-  const titles: Record<string, string> = { dashboard: "ພາບລວມ", pos: "ຈັດການໂຕະ", menu: "ເມນູ", stock: "ຄັງ", reports: "ລາຍງານ", staff: "ພະນັກ" };
+  const titles: Record<string, string> = { dashboard: "ພາບລວມ", pos: "ຈັດການໂຕະ", menu: "ເມນູ", stock: "ຄັງ", billing: "ບິນ", reports: "ລາຍງານ", staff: "ພະນັກ" };
 
   return (
     <div style={{ display: "flex", height: "100vh", width: "100%", background: C.bg, fontFamily: "'DM Sans',sans-serif", color: C.text, overflow: "hidden" }}>
@@ -245,11 +461,49 @@ export default function App() {
         <div style={{ flex: 1, overflow: "auto", padding: view === "pos" ? 0 : "22px 26px" }}>
           {view === "dashboard" && <Dashboard sales={sales} tables={tables} menu={menu} />}
           {view === "pos" && <POS tables={tables} menu={menu} selTable={selTable} setSelTable={setSelTable} showAddItems={showAddItems} setShowAddItems={setShowAddItems} addItem={addItem} rmItem={rmItem} openTable={openTable} checkout={checkout} />}
+          {view === "billing" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
+                <div style={{ fontSize: 14, color: C.textMid }}>ບິນ</div>
+                <Btn onClick={() => setModal({ type: "session-form", title: "ເພີ່ມ Bill", data: { sessionType: "dine-in", tableNumber: "", staffId: "" } })}><Plus size={14} /> ເພີ່ມ Bill</Btn>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
+                {sessions.map(s => {
+                  const total = s.items.reduce((sum, item) => sum + (menu.find(m => m.id === item.id)?.price ?? 0) * item.qty, 0);
+                  const pending = s.status === "pending_payment";
+                  return (
+                    <div key={s.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{s.id}</div>
+                          <div style={{ fontSize: 11, color: C.textDim }}>{s.createdAt} · {s.payMethod} · {s.note}</div>
+                        </div>
+                        <div style={{ fontSize: 12, color: pending ? C.red : C.green, padding: "6px 10px", borderRadius: 999, background: pending ? "rgba(183,28,28,0.12)" : "rgba(74,140,69,0.12)" }}>
+                          {pending ? "ລໍຖ້າຊໍາລະ" : "ເປີດ"}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: C.gold }}>{total.toLocaleString("en")} ₭</div>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", color: C.textDim, fontSize: 12 }}>
+                        <span>{s.note}</span>
+                        <span>{s.items.length} ລາຍການ</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                        {!pending && <Btn variant="secondary" onClick={() => requestPayment(s.id)}>ຂໍການຊໍາລະ</Btn>}
+                        {pending && <Btn onClick={() => confirmPayment(s.id)}>ຊໍາລະ</Btn>}
+                        <Btn variant="danger" onClick={() => cancelSession(s.id)}>ຍົກເລີກ</Btn>
+                      </div>
+                    </div>
+                  );
+                })}
+                {sessions.length === 0 && <div style={{ gridColumn: "1/-1", background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, padding: 18, color: C.textDim }}>ບໍ່ມີບິນໃຫ້ສະແດງ</div>}
+              </div>
+            </div>
+          )}
           {view === "menu" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
                 <div style={{ fontSize: 14, color: C.textMid }}>ເມນູທັງໝົດ</div>
-                <Btn onClick={() => setModal({ type: "menu-form", title: "ເພີ່ມເມນູ", data: { name: "", en: "", price: "", cat: MENU_CATS[0], emoji: "🍜", ok: true } })}><Plus size={14} /> ເພີ່ມເມນູ</Btn>
+                <Btn onClick={() => setModal({ type: "menu-form", title: "ເພີ່ມເມນູ", data: { name: "", en: "", price: "", cat: categories[0]?.category_name || categories[0]?.categoryName || "", emoji: "🍜", ok: true } })}><Plus size={14} /> ເພີ່ມເມນູ</Btn>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>{menuCategories.map(c => <button key={c} onClick={() => setActiveCat(c)} style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${activeCat === c ? C.gold : C.border}`, background: activeCat === c ? C.goldDim : C.card, color: C.text }}>{c}</button>)}</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 }}>
@@ -307,7 +561,7 @@ export default function App() {
           {view === "reports" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {[{ label: "ລາຍຮັບລວມ", value: "3,570,000 ₭", extra: "+18%", color: C.gold }, { label: "ໃບບິນ", value: `${sales.length + 141}`, extra: "+12%", color: C.green }, { label: "ໂຕະທີ່ໃຊ້", value: `${tables.filter(t => t.status === "occupied").length}/${tables.length}`, extra: "6 ໂຕະ", color: C.blue }].map(item => (
+                {[{ label: "ລາຍຮັບລວມ", value: `${revenueTotal.toLocaleString("en")} ₭`, extra: "ຈາກບິນຈິງ", color: C.gold }, { label: "ໃບບິນ", value: `${activeBillsCount}`, extra: "ບິນເປີດ", color: C.green }, { label: "ໂຕະທີ່ໃຊ້", value: `${occupiedTablesCount}/${tables.length}`, extra: "ໂຕະທີ່ກຳລັງໃຊ້", color: C.blue }].map(item => (
                   <div key={item.label} style={{ flex: 1, minWidth: 140, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
                     <div style={{ fontSize: 10, color: C.textMid, textTransform: "uppercase", letterSpacing: 1.4 }}>{item.label}</div>
                     <div style={{ fontSize: 22, fontWeight: 700, color: C.text, marginTop: 7 }}>{item.value}</div>
@@ -379,7 +633,7 @@ export default function App() {
             <Inp label="Emoji" value={modal.data.emoji} onChange={e => setField("emoji", e.target.value)} />
           </div>
           <Sel label="ໝວດ" value={modal.data.cat} onChange={e => setField("cat", e.target.value)}>
-            {MENU_CATS.map(c => <option key={c} value={c}>{c}</option>)}
+            {categories.map(c => <option key={c.category_id || c.categoryId} value={c.category_name || c.categoryName || c.name}>{c.category_name || c.categoryName || c.name}</option>)}
           </Sel>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}><Btn variant="secondary" onClick={() => setModal(null)}>ຍົກເລີກ</Btn><Btn onClick={submitMenu}>ບັນທຶກ</Btn></div>
         </Modal>
@@ -394,6 +648,20 @@ export default function App() {
             <Inp label="ເວລາເລີ່ມ" value={modal.data.since} onChange={e => setField("since", e.target.value)} />
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}><Btn variant="secondary" onClick={() => setModal(null)}>ຍົກເລີກ</Btn><Btn onClick={submitStaff}>ບັນທຶກ</Btn></div>
+        </Modal>
+      )}
+
+      {modal?.type === "session-form" && (
+        <Modal title={modal.title ?? "Bill"} onClose={() => setModal(null)}>
+          <Sel label="ປະເພດເຊດຊັນ" value={modal.data.sessionType} onChange={e => setField("sessionType", e.target.value)}>
+            <option value="dine-in">ທານທີ່ຮ້ານ</option>
+            <option value="takeaway">ກັບບ້ານ</option>
+          </Sel>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
+            <Inp label="ເລກໂຕະ" type="number" value={modal.data.tableNumber} onChange={e => setField("tableNumber", e.target.value)} />
+            <Inp label="Staff ID" type="number" value={modal.data.staffId} onChange={e => setField("staffId", e.target.value)} />
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}><Btn variant="secondary" onClick={() => setModal(null)}>ຍົກເລີກ</Btn><Btn onClick={submitSession}>ບັນທຶກ</Btn></div>
         </Modal>
       )}
 

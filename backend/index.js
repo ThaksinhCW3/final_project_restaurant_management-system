@@ -24,6 +24,7 @@ const importRoute = require('./routes/inventory/Imports')(pool);
 const importDetailRoute = require('./routes/inventory/ImportDetails')(pool);
 const supplierOrderRoute = require('./routes/inventory/SupplierOrders')(pool);
 const supplierOrderDetailRoute = require('./routes/inventory/SupplierOrderDetails')(pool);
+const stockRoute = require('./routes/inventory/Stock')(pool);
 //Menu
 const menuRoute = require('./routes/menu/Menus')(pool);
 const categoryRoute = require('./routes/menu/Categories')(pool);
@@ -35,6 +36,8 @@ const salesRoute = require('./routes/order/Sales')(pool);
 const serviceSessionRoute = require('./routes/order/ServiceSessions')(pool);
 //Staff
 const staffRoute = require('./routes/staff/Staff')(pool);
+//Tables
+const tableRoute = require('./routes/table/Tables')(pool);
 
 
 // Link the files to base URLs
@@ -52,6 +55,8 @@ app.use('/api/sales', salesRoute);
 app.use('/api/service-sessions', serviceSessionRoute);
 app.use('/api/supplier-orders', supplierOrderRoute);
 app.use('/api/supplier-order-details', supplierOrderDetailRoute);
+app.use('/api/tables', tableRoute);
+app.use('/api/stock', stockRoute);
 
 
 const PORT = 5000;

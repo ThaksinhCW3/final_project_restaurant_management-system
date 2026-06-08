@@ -8,6 +8,7 @@ export interface MenuItem {
   sold: number;
   ok: boolean;
   emoji: string;
+  categoryId?: number | null;
 }
 
 export interface StaffItem {
@@ -17,6 +18,8 @@ export interface StaffItem {
   since: string;
   orders: number;
   emoji?: string;
+  phone?: string | null;
+  username?: string | null;
 }
 
 export interface StockItem {
@@ -39,6 +42,7 @@ export interface TableItem {
   status: "occupied" | "free";
   items: OrderItem[];
   since: string | null;
+  sessionId?: number | null;
 }
 
 export interface SaleItem {
@@ -48,6 +52,7 @@ export interface SaleItem {
   total: number;
   time: string;
   date: string;
+  sessionId?: number | null;
 }
 
 export interface SessionOrder {
@@ -63,6 +68,10 @@ export interface SessionItem {
   items: SessionOrder[];
   createdAt: string;
   payMethod: string;
+  sessionType?: "dine-in" | "takeaway";
+  tableNumber?: number | null;
+  staffId?: number | null;
+  endedAt?: string | null;
 }
 
 export interface ChartData {

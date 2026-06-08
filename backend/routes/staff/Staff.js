@@ -5,7 +5,86 @@ const jwt = require('jsonwebtoken');
 
 // We will pass the database pool from server.js to here
 module.exports = (pool) => {
-    
+
+    const splitName = (value = "") => {
+        const parts = String(value).trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 0) {
+            return { firstName: "", lastName: "" };
+        }
+
+        if (parts.length === 1) {
+            return { firstName: parts[0], lastName: "" };
+        }
+
+        return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+    };
+
+    // GET all staff
+    router.get('/', (req, res) => {
+        const query = `
+            SELECT
+                staff_id as id,
+                CONCAT(first_name, ' ', last_name) as name,
+                role,
+                phone,
+                username
+            FROM staff
+        `;
+        pool.query(query, (err, results) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(results);
+        });
+    });
+
+    // Basic CRUD for the frontend staff page
+    router.post('/', (req, res) => {
+        const { name, role = 'employee', phone = null, username, password = 'password' } = req.body;
+        const { firstName, lastName } = splitName(name);
+        const finalUsername = username || `${firstName || 'staff'}_${Date.now()}`;
+        const normalizedRole = role === 'ເຈົ້າຂອງ' ? 'manager' : role;
+
+        const query = 'INSERT INTO staff (first_name, last_name, role, username, password, phone) VALUES (?, ?, ?, ?, ?, ?)';
+        pool.query(query, [firstName, lastName, normalizedRole, finalUsername, password, phone], (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.status(201).json({ message: 'Staff created successfully!', id: result.insertId, staff_id: result.insertId, username: finalUsername });
+        });
+    });
+
+    router.put('/:id', (req, res) => {
+        const { id } = req.params;
+        const { name, role = 'employee', phone = null, username, password } = req.body;
+        const { firstName, lastName } = splitName(name);
+        const normalizedRole = role === 'ເຈົ້າຂອງ' ? 'manager' : role;
+
+        const query = password
+            ? 'UPDATE staff SET first_name = ?, last_name = ?, role = ?, username = COALESCE(?, username), phone = ?, password = ? WHERE staff_id = ?'
+            : 'UPDATE staff SET first_name = ?, last_name = ?, role = ?, username = COALESCE(?, username), phone = ? WHERE staff_id = ?';
+        const values = password
+            ? [firstName, lastName, normalizedRole, username || null, phone, password, id]
+            : [firstName, lastName, normalizedRole, username || null, phone, id];
+
+        pool.query(query, values, (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ message: 'Staff not found' });
+            }
+            res.json({ message: 'Staff updated successfully!' });
+        });
+    });
+
+    router.delete('/:id', (req, res) => {
+        const { id } = req.params;
+        const query = 'DELETE FROM staff WHERE staff_id = ?';
+
+        pool.query(query, [id], (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ message: 'Staff not found' });
+            }
+            res.json({ message: 'Staff deleted successfully!' });
+        });
+    });
+
     // Staff register route
     router.post('/register', async (req, res) => {
         const {first_name, last_name, role, username, password, phone } = req.body;
