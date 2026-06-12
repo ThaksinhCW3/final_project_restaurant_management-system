@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { imports, importDetails, ingredients, suppliersOrders, staff, suppliers, categories, menus, orders, orderItems, serviceSessions, recipes, sales, supplierOrderDetails } from "./schema";
+import { imports, importDetails, ingredients, supplyOrders, staff, suppliers, categories, menus, orders, orderItems, serviceSessions, recipes, sales, supplyOrderDetails } from "./schema";
 
 export const importDetailsRelations = relations(importDetails, ({one}) => ({
 	import: one(imports, {
@@ -14,9 +14,9 @@ export const importDetailsRelations = relations(importDetails, ({one}) => ({
 
 export const importsRelations = relations(imports, ({one, many}) => ({
 	importDetails: many(importDetails),
-	suppliersOrder: one(suppliersOrders, {
+	supplyOrder: one(supplyOrders, {
 		fields: [imports.supplierOrderId],
-		references: [suppliersOrders.supplierOrderId]
+		references: [supplyOrders.supplyOrderId]
 	}),
 	staff: one(staff, {
 		fields: [imports.receivedBy],
@@ -31,18 +31,18 @@ export const ingredientsRelations = relations(ingredients, ({one, many}) => ({
 		references: [suppliers.supplierId]
 	}),
 	recipes: many(recipes),
-	supplierOrderDetails: many(supplierOrderDetails),
+	supplyOrderDetails: many(supplyOrderDetails),
 }));
 
-export const suppliersOrdersRelations = relations(suppliersOrders, ({one, many}) => ({
+export const supplyOrdersRelations = relations(supplyOrders, ({one, many}) => ({
 	imports: many(imports),
-	supplierOrderDetails: many(supplierOrderDetails),
+	supplyOrderDetails: many(supplyOrderDetails),
 	supplier: one(suppliers, {
-		fields: [suppliersOrders.supplierId],
+		fields: [supplyOrders.supplierId],
 		references: [suppliers.supplierId]
 	}),
 	staff: one(staff, {
-		fields: [suppliersOrders.staffId],
+		fields: [supplyOrders.staffId],
 		references: [staff.staffId]
 	}),
 }));
@@ -51,12 +51,12 @@ export const staffRelations = relations(staff, ({many}) => ({
 	imports: many(imports),
 	orders: many(orders),
 	serviceSessions: many(serviceSessions),
-	suppliersOrders: many(suppliersOrders),
+	supplyOrders: many(supplyOrders),
 }));
 
 export const suppliersRelations = relations(suppliers, ({many}) => ({
 	ingredients: many(ingredients),
-	suppliersOrders: many(suppliersOrders),
+	supplyOrders: many(supplyOrders),
 }));
 
 export const menusRelations = relations(menus, ({one, many}) => ({
@@ -122,13 +122,13 @@ export const salesRelations = relations(sales, ({one}) => ({
 	}),
 }));
 
-export const supplierOrderDetailsRelations = relations(supplierOrderDetails, ({one}) => ({
-	suppliersOrder: one(suppliersOrders, {
-		fields: [supplierOrderDetails.supplierOrderId],
-		references: [suppliersOrders.supplierOrderId]
+export const supplyOrderDetailsRelations = relations(supplyOrderDetails, ({one}) => ({
+	supplyOrder: one(supplyOrders, {
+		fields: [supplyOrderDetails.supplyOrderId],
+		references: [supplyOrders.supplyOrderId]
 	}),
 	ingredient: one(ingredients, {
-		fields: [supplierOrderDetails.ingredientId],
+		fields: [supplyOrderDetails.ingredientId],
 		references: [ingredients.ingredientId]
 	}),
 }));

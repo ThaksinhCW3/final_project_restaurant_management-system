@@ -1,4 +1,4 @@
-import { mysqlTable, mysqlSchema, AnyMySqlColumn, primaryKey, int, varchar, index, foreignKey, decimal, date, datetime, text, mysqlEnum, unique, tinyint} from "drizzle-orm/mysql-core"
+import { mysqlTable, mysqlSchema, AnyMySqlColumn, primaryKey, int, varchar, index, foreignKey, decimal, datetime, text, mysqlEnum, unique } from "drizzle-orm/mysql-core"
 import { sql } from "drizzle-orm"
 
 export const categories = mysqlTable("categories", {
@@ -15,8 +15,6 @@ export const importDetails = mysqlTable("import_details", {
 	ingredientId: int("ingredient_id").notNull().references(() => ingredients.ingredientId),
 	receivedQuantity: decimal("received_quantity", { precision: 10, scale: 2 }).notNull(),
 	costPrice: decimal("cost_price", { precision: 10, scale: 2 }).notNull(),
-	// you can use { mode: 'date' }, if you want to have Date as type for this column
-	expiryDate: date("expiry_date", { mode: 'string' }),
 },
 (table) => [
 	index("import_id").on(table.importId),
@@ -26,7 +24,7 @@ export const importDetails = mysqlTable("import_details", {
 
 export const imports = mysqlTable("imports", {
 	importId: int("import_id").autoincrement().notNull(),
-	supplierOrderId: int("supplier_order_id").references(() => suppliersOrders.supplierOrderId),
+	supplierOrderId: int("supplier_order_id").references(() => supplyOrders.supplyOrderId),
 	importDate: datetime("import_date", { mode: 'string'}).default(sql`(CURRENT_TIMESTAMP)`),
 	receivedBy: int("received_by").notNull().references(() => staff.staffId),
 	remark: text(),
@@ -40,10 +38,11 @@ export const imports = mysqlTable("imports", {
 export const ingredients = mysqlTable("ingredients", {
 	ingredientId: int("ingredient_id").autoincrement().notNull(),
 	ingredientName: varchar("ingredient_name", { length: 150 }).notNull(),
+	ingredientImage: varchar("ingredient_image", { length: 255 }),
 	stockQuantity: decimal("stock_quantity", { precision: 10, scale: 2 }).default('0.00'),
 	unit: mysqlEnum(['kg','g','pcs']),
-	costPerUnit: decimal("cost_per_unit", { precision: 10, scale: 2 }).notNull(),
-	minThereshold: decimal("min_thereshold", { precision: 10, scale: 2 }).notNull(),
+	costPerUnit: decimal("cost_per_unit", { precision: 10, scale: 2 }).default('0.00'),
+	minThereshold: decimal("min_thereshold", { precision: 10, scale: 2 }).default('0.00'),
 	supplierId: int("supplier_id").references(() => suppliers.supplierId, { onDelete: "set null" } ),
 },
 (table) => [
@@ -54,6 +53,7 @@ export const ingredients = mysqlTable("ingredients", {
 export const menus = mysqlTable("menus", {
 	menuId: int("menu_id").autoincrement().notNull(),
 	menuName: varchar("menu_name", { length: 150 }).notNull(),
+	menuImage: varchar("menu_image", { length: 255 }),
 	categoryId: int("category_id").references(() => categories.categoryId, { onDelete: "set null" } ),
 	price: decimal({ precision: 10, scale: 2 }).notNull(),
 	availability: tinyint().default(1),
@@ -140,31 +140,30 @@ export const staff = mysqlTable("staff", {
 	unique("username").on(table.username),
 ]);
 
-export const supplierOrderDetails = mysqlTable("supplier_order_details", {
-	supplierOrderDetailId: int("supplier_order_detail_id").autoincrement().notNull(),
-	supplierOrderId: int("supplier_order_id").notNull().references(() => suppliersOrders.supplierOrderId, { onDelete: "cascade" } ),
+export const suppliers = mysqlTable("suppliers", {
+	supplierId: int("supplier_id").autoincrement().notNull(),
+	supplierName: varchar("supplier_name", { length: 150 }).notNull(),
+	phone: varchar({ length: 10 }),
+},
+(table) => [
+	primaryKey({ columns: [table.supplierId], name: "suppliers_supplier_id"}),
+]);
+
+export const supplyOrderDetails = mysqlTable("supply_order_details", {
+	supplyOrderDetailId: int("supply_order_detail_id").autoincrement().notNull(),
+	supplyOrderId: int("supply_order_id").notNull().references(() => supplyOrders.supplyOrderId, { onDelete: "cascade" } ),
 	ingredientId: int("ingredient_id").notNull().references(() => ingredients.ingredientId),
 	quantity: decimal({ precision: 10, scale: 2 }).notNull(),
 	unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
 },
 (table) => [
 	index("ingredient_id").on(table.ingredientId),
-	index("supplier_order_id").on(table.supplierOrderId),
-	primaryKey({ columns: [table.supplierOrderDetailId], name: "supplier_order_details_supplier_order_detail_id"}),
+	index("supplier_order_id").on(table.supplyOrderId),
+	primaryKey({ columns: [table.supplyOrderDetailId], name: "supply_order_details_supply_order_detail_id"}),
 ]);
 
-export const suppliers = mysqlTable("suppliers", {
-	supplierId: int("supplier_id").autoincrement().notNull(),
-	supplierName: varchar("supplier_name", { length: 150 }).notNull(),
-	phone: varchar({ length: 10 }),
-	address: text(),
-},
-(table) => [
-	primaryKey({ columns: [table.supplierId], name: "suppliers_supplier_id"}),
-]);
-
-export const suppliersOrders = mysqlTable("suppliers_orders", {
-	supplierOrderId: int("supplier_order_id").autoincrement().notNull(),
+export const supplyOrders = mysqlTable("supply_orders", {
+	supplyOrderId: int("supply_order_id").autoincrement().notNull(),
 	supplierId: int("supplier_id").notNull().references(() => suppliers.supplierId),
 	staffId: int("staff_id").notNull().references(() => staff.staffId),
 	orderDate: datetime("order_date", { mode: 'string'}).default(sql`(CURRENT_TIMESTAMP)`),
@@ -174,5 +173,5 @@ export const suppliersOrders = mysqlTable("suppliers_orders", {
 (table) => [
 	index("staff_id").on(table.staffId),
 	index("supplier_id").on(table.supplierId),
-	primaryKey({ columns: [table.supplierOrderId], name: "suppliers_orders_supplier_order_id"}),
+	primaryKey({ columns: [table.supplyOrderId], name: "supply_orders_supply_order_id"}),
 ]);

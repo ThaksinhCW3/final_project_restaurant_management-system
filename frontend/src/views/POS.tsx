@@ -42,13 +42,13 @@ export default function POS({
               <div key={t.id} onClick={() => setSelTable(isSel ? null : t.id)}
                 style={{ background: isSel ? "rgba(232,160,32,0.10)" : C.card, border: `2px solid ${isSel ? C.gold : isOcc ? "rgba(208,64,48,0.33)" : C.border}`, borderRadius: 15, padding: "16px 15px", cursor: "pointer", transition: "all 0.18s", position: "relative" }}>
                 {isOcc && <div style={{ position: "absolute", top: 9, right: 9, width: 7, height: 7, borderRadius: "50%", background: C.red }} />}
-                <div style={{ fontSize: 21, fontWeight: 700, color: isOcc ? C.text : C.textMid, fontFamily: "'Playfair Display',serif" }}>{t.name}</div>
+                <div style={{ fontSize: 21, fontWeight: 700, color: isOcc ? C.text : C.textMid, fontFamily: "var(--heading)" }}>{t.name}</div>
                 <div style={{ fontSize: 10, color: C.textDim, marginTop: 1 }}>{t.seats} ບ່ອນ</div>
                 <div style={{ marginTop: 11 }}>
                   {isOcc ? (
                     <>
                       <div style={{ fontSize: 9, color: C.textDim, marginBottom: 2 }}>ເຂົ້ານຳໃຊ້ {t.since}</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, fontFamily: "'JetBrains Mono',monospace" }}>{kip(tot)}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, fontFamily: "var(--sans)" }}>{kip(tot)}</div>
                       <div style={{ fontSize: 9, color: C.textDim, marginTop: 2 }}>{t.items.length} ລາຍການ</div>
                     </>
                   ) : <div style={{ fontSize: 12, color: C.green, fontWeight: 500 }}>ຫວ່າງ ✓</div>}
@@ -64,7 +64,7 @@ export default function POS({
           <>
             <div style={{ padding: "18px 18px 14px", borderBottom: `1px solid ${C.border}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div><div style={{ fontSize: 10, color: C.textDim, textTransform: "uppercase", letterSpacing: 1.2 }}>ໂຕະ</div><div style={{ fontSize: 26, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display',serif" }}>{selTblData.name}</div></div>
+                <div><div style={{ fontSize: 10, color: C.textDim, textTransform: "uppercase", letterSpacing: 1.2 }}>ໂຕະ</div><div style={{ fontSize: 26, fontWeight: 700, color: C.text, fontFamily: "var(--heading)" }}>{selTblData.name}</div></div>
                 <button onClick={() => { setSelTable(null); setShowAddItems(false); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: C.textDim, padding: 4, marginTop: 2 }}><X size={16} /></button>
               </div>
               {selTblData.status === "free"
@@ -87,7 +87,7 @@ export default function POS({
                           <span style={{ fontSize: 13, fontWeight: 700, color: C.text, minWidth: 18, textAlign: "center" }}>{item.qty}</span>
                           <button onClick={() => addItem(item.id)} style={{ width: 22, height: 22, borderRadius: "50%", background: C.goldDim, border: `1px solid ${C.borderMid}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.gold }}><Plus size={10} /></button>
                         </div>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: C.text, width: 65, textAlign: "right", fontFamily: "'JetBrains Mono',monospace" }}>{kip(m.price * item.qty)}</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: C.text, width: 65, textAlign: "right", fontFamily: "var(--sans)" }}>{kip(m.price * item.qty)}</span>
                       </div>
                     );
                   })}
@@ -108,7 +108,7 @@ export default function POS({
                 <div style={{ padding: "16px 18px", borderTop: `1px solid ${C.border}`, background: C.sidebar }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
                     <span style={{ fontSize: 14, color: C.textMid }}>ລວມທັງໝົດ</span>
-                    <span style={{ fontSize: 20, fontWeight: 700, color: C.gold, fontFamily: "'JetBrains Mono',monospace" }}>{kip(tblTotal(selTblData, menu))}</span>
+                    <span style={{ fontSize: 20, fontWeight: 700, color: C.gold, fontFamily: "var(--sans)" }}>{kip(tblTotal(selTblData, menu))}</span>
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <button onClick={() => setShowAddItems(!showAddItems)} style={{ flex: 1, padding: "10px", background: showAddItems ? C.card2 : "transparent", border: `1px solid ${C.borderMid}`, color: C.text, borderRadius: 10, cursor: "pointer" }}>{showAddItems ? "ປິດ" : "+ ເພີ່ມອາຫານ"}</button>

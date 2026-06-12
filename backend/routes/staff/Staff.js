@@ -23,7 +23,10 @@ module.exports = (pool) => {
     router.get('/', (req, res) => {
         const query = `
             SELECT
+                staff_id as staffId,
                 staff_id as id,
+                first_name as firstName,
+                last_name as lastName,
                 CONCAT(first_name, ' ', last_name) as name,
                 role,
                 phone,
@@ -38,22 +41,51 @@ module.exports = (pool) => {
 
     // Basic CRUD for the frontend staff page
     router.post('/', (req, res) => {
-        const { name, role = 'employee', phone = null, username, password = 'password' } = req.body;
-        const { firstName, lastName } = splitName(name);
+        const {
+            name,
+            firstName: bodyFirstName,
+            lastName: bodyLastName,
+            role = 'employee',
+            phone = null,
+            username,
+            password = 'password'
+        } = req.body;
+        const split = splitName(name);
+        const firstName = bodyFirstName ?? split.firstName;
+        const lastName = bodyLastName ?? split.lastName;
         const finalUsername = username || `${firstName || 'staff'}_${Date.now()}`;
         const normalizedRole = role === 'ເຈົ້າຂອງ' ? 'manager' : role;
 
         const query = 'INSERT INTO staff (first_name, last_name, role, username, password, phone) VALUES (?, ?, ?, ?, ?, ?)';
         pool.query(query, [firstName, lastName, normalizedRole, finalUsername, password, phone], (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({ message: 'Staff created successfully!', id: result.insertId, staff_id: result.insertId, username: finalUsername });
+            res.status(201).json({
+                message: 'Staff created successfully!',
+                id: result.insertId,
+                staffId: result.insertId,
+                staff_id: result.insertId,
+                firstName,
+                lastName,
+                name: `${firstName} ${lastName}`.trim(),
+                username: finalUsername
+            });
         });
     });
 
     router.put('/:id', (req, res) => {
         const { id } = req.params;
-        const { name, role = 'employee', phone = null, username, password } = req.body;
-        const { firstName, lastName } = splitName(name);
+        const {
+            name,
+            firstName: bodyFirstName,
+            lastName: bodyLastName,
+            role = 'employee',
+            phone = null,
+            username,
+            password
+        } = req.body;
+        const split = splitName(name);
+        const firstName = bodyFirstName ?? split.firstName;
+        const lastName = bodyLastName ?? split.lastName;
         const normalizedRole = role === 'ເຈົ້າຂອງ' ? 'manager' : role;
 
         const query = password

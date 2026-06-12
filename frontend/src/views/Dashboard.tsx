@@ -29,7 +29,7 @@ export default function Dashboard({ sales, tables, menu }: DashboardProps) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
             <div>
               <div style={{ fontSize: 11, color: C.textMid, marginBottom: 3 }}>ລາຍຮັບ 6 ວັນທີ່ຜ່ານມາ</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display',serif" }}>{kip(revenueToday)}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "var(--heading)" }}>{kip(revenueToday)}</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(74,140,69,0.12)", border: "1px solid rgba(74,140,69,0.3)", borderRadius: 8, padding: "4px 10px" }}>
               <TrendingUp size={12} color={C.green} /><span style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>+18%</span>
@@ -50,7 +50,7 @@ export default function Dashboard({ sales, tables, menu }: DashboardProps) {
 
         <div style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 22 }}>
           <div style={{ fontSize: 11, color: C.textMid, marginBottom: 2 }}>ສັດສ່ວນລາຍຮັບ</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 14, fontFamily: "'Playfair Display',serif" }}>ຕາມໝວດໝູ່</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 14, fontFamily: "var(--heading)" }}>ຕາມໝວດໝູ່</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {PIE_DATA.map(e => (
               <div key={e.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

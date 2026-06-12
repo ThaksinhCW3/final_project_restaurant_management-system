@@ -10,22 +10,36 @@ const API = axios.create({
 });
 
 type MenuRow = {
-  menu_id: number;
-  menu_name: string;
+  menuId?: number;
+  menu_id?: number;
+  menuName?: string;
+  menu_name?: string;
+  menuImage?: string | null;
+  menu_image?: string | null;
+  categoryId?: number | null;
   category_id?: number | null;
   price: string | number;
   availability: number | boolean | null;
+  categoryName?: string | null;
   category_name?: string | null;
 };
 
 type CategoryRow = {
-  category_id: number;
-  category_name: string;
+  categoryId?: number;
+  category_id?: number;
+  categoryName?: string;
+  category_name?: string;
 };
 
 type StaffRow = {
   id: number;
+  staffId?: number;
+  staff_id?: number;
   name: string;
+  firstName?: string;
+  first_name?: string;
+  lastName?: string;
+  last_name?: string;
   role: string;
   phone?: string | null;
   username?: string | null;
@@ -46,36 +60,60 @@ type TableRow = {
   status: string;
   since: string | null;
   session_id?: number | null;
+  sessionId?: number | null;
 };
 
 type OrderRow = {
+  orderId?: number;
   order_id: number;
   session_id: number | null;
+  sessionId?: number | null;
+  staff_id?: number | null;
+  staffId?: number | null;
+  status?: string;
+  ordered_at?: string;
+  orderedAt?: string;
 };
 
 type OrderItemRow = {
+  orderItemId?: number;
   order_item_id: number;
+  orderId?: number;
   order_id: number;
+  menuId?: number;
   menu_id: number;
+  menuName?: string;
   menu_name?: string;
   quantity: number;
 };
 
 type SaleRow = {
-  sale_id: number;
+  salesId?: number;
+  sale_id?: number;
+  sessionId?: number | null;
   session_id: number | null;
+  totalAmount?: string | number;
   total_amount: string | number;
+  paidAt?: string;
   paid_at: string;
 };
 
 type SessionRow = {
+  sessionId?: number;
   session_id: number;
+  sessionType?: "dine-in" | "takeaway" | string | null;
   session_type: "dine-in" | "takeaway" | string | null;
+  tableNumber?: number | null;
   table_number: number | null;
+  staffId?: number | null;
   staff_id: number | null;
+  firstName?: string | null;
   first_name?: string | null;
+  lastName?: string | null;
   last_name?: string | null;
+  startedAt?: string;
   started_at: string;
+  endedAt?: string | null;
   ended_at: string | null;
   status: string | null;
 };
@@ -90,6 +128,7 @@ type MenuCreateInput = {
   emoji?: string;
   sold?: number;
   categoryId?: number | null;
+  image?: string | null;
 };
 
 type StaffCreateInput = {
@@ -194,27 +233,32 @@ const buildOrderItemMap = (orders: OrderRow[], items: OrderItemRow[]): Map<numbe
   const byOrderId = new Map<number, OrderItem[]>();
 
   for (const row of items) {
-    const list = byOrderId.get(row.order_id) ?? [];
-    const existing = list.find(item => item.id === row.menu_id);
+    const orderId = row.order_id ?? row.orderId ?? 0;
+    const menuId = row.menu_id ?? row.menuId ?? 0;
+    const list = byOrderId.get(orderId) ?? [];
+    const existing = list.find(item => item.id === menuId);
 
     if (existing) {
       existing.qty += row.quantity;
     } else {
-      list.push({ id: row.menu_id, qty: row.quantity });
+      list.push({ id: menuId, qty: row.quantity });
     }
 
-    byOrderId.set(row.order_id, list);
+    byOrderId.set(orderId, list);
   }
 
   const bySessionId = new Map<number, OrderItem[]>();
 
   for (const order of orders) {
-    if (!order.session_id) {
+    const sessionId = order.session_id ?? order.sessionId ?? null;
+    const orderId = order.order_id ?? order.orderId ?? 0;
+
+    if (!sessionId) {
       continue;
     }
 
-    const orderItems = byOrderId.get(order.order_id) ?? [];
-    const current = bySessionId.get(order.session_id) ?? [];
+    const orderItems = byOrderId.get(orderId) ?? [];
+    const current = bySessionId.get(sessionId) ?? [];
 
     for (const item of orderItems) {
       const existing = current.find(entry => entry.id === item.id);
@@ -225,27 +269,28 @@ const buildOrderItemMap = (orders: OrderRow[], items: OrderItemRow[]): Map<numbe
       }
     }
 
-    bySessionId.set(order.session_id, current);
+    bySessionId.set(sessionId, current);
   }
 
   return bySessionId;
 };
 
 const normalizeMenu = (row: MenuRow): MenuItem => ({
-  id: row.menu_id,
-  name: row.menu_name,
-  en: row.menu_name,
+  id: row.menuId ?? row.menu_id ?? 0,
+  name: row.menuName ?? row.menu_name ?? "",
+  en: row.menuImage ?? row.menu_image ?? row.categoryName ?? row.category_name ?? "Menu item",
   price: formatMoney(row.price),
-  cat: row.category_name ?? "ອື່ນໆ",
+  cat: row.categoryName ?? row.category_name ?? "ອື່ນໆ",
   sold: 0,
   ok: row.availability === undefined || row.availability === null ? true : Boolean(Number(row.availability)),
-  emoji: "🍜",
-  categoryId: row.category_id ?? null,
+  emoji: row.menuImage ? "🖼️" : "🍜",
+  categoryId: row.categoryId ?? row.category_id ?? null,
+  image: row.menuImage ?? row.menu_image ?? null,
 });
 
 const normalizeStaff = (row: StaffRow): StaffItem => ({
-  id: row.id,
-  name: row.name,
+  id: row.staffId ?? row.staff_id ?? row.id,
+  name: row.name || `${row.firstName ?? row.first_name ?? ""} ${row.lastName ?? row.last_name ?? ""}`.trim(),
   role: row.role,
   since: row.username ?? row.phone ?? "—",
   orders: 0,
@@ -269,9 +314,12 @@ const toSessionStatus = (value: string | null | undefined): "active" | "pending_
   value === "Completed" ? "pending_payment" : "active";
 
 const normalizeSession = (row: SessionRow, sessionItems: Map<number, OrderItem[]>): SessionItem => {
-  const label = sessionLabel(row.session_id);
-  const itemCount = sessionItems.get(row.session_id) ?? [];
-  const note = row.table_number ? `Table ${row.table_number}` : row.session_type ?? "Bill";
+  const sessionId = row.sessionId ?? row.session_id;
+  const label = sessionLabel(sessionId);
+  const itemCount = sessionItems.get(sessionId) ?? [];
+  const tableNumber = row.tableNumber ?? row.table_number;
+  const sessionType = row.sessionType ?? row.session_type ?? "dine-in";
+  const note = tableNumber ? `Table ${tableNumber}` : sessionType;
 
   return {
     id: label,
@@ -279,12 +327,12 @@ const normalizeSession = (row: SessionRow, sessionItems: Map<number, OrderItem[]
     status: toSessionStatus(row.status),
     orderStatus: null,
     items: itemCount,
-    createdAt: formatTime(row.started_at),
-    payMethod: row.session_type ?? "dine-in",
-    sessionType: (row.session_type as "dine-in" | "takeaway" | null) ?? "dine-in",
-    tableNumber: row.table_number,
-    staffId: row.staff_id,
-    endedAt: row.ended_at,
+    createdAt: formatTime(row.startedAt ?? row.started_at),
+    payMethod: sessionType as string,
+    sessionType: sessionType as "dine-in" | "takeaway",
+    tableNumber,
+    staffId: row.staffId ?? row.staff_id,
+    endedAt: row.endedAt ?? row.ended_at,
   };
 };
 
@@ -293,23 +341,25 @@ const normalizeSale = (
   sessionLookup: Map<number, SessionRow>,
   sessionItems: Map<number, OrderItem[]>,
 ): SaleItem => {
-  const session = row.session_id ? sessionLookup.get(row.session_id) : undefined;
-  const itemCount = row.session_id ? sessionItems.get(row.session_id)?.length ?? 0 : 0;
-  const tableLabel = session?.table_number ? `Table ${session.table_number}` : row.session_id ? sessionLabel(row.session_id) : "Bill";
+  const sessionId = row.sessionId ?? row.session_id ?? null;
+  const session = sessionId ? sessionLookup.get(sessionId) : undefined;
+  const itemCount = sessionId ? sessionItems.get(sessionId)?.length ?? 0 : 0;
+  const tableLabel = session?.tableNumber ?? session?.table_number ? `Table ${session?.tableNumber ?? session?.table_number}` : sessionId ? sessionLabel(sessionId) : "Bill";
 
   return {
-    id: row.sale_id,
+    id: row.salesId ?? row.sale_id ?? 0,
     table: tableLabel,
     items: itemCount,
-    total: formatMoney(row.total_amount),
-    time: formatTime(row.paid_at),
-    date: formatDate(row.paid_at),
-    sessionId: row.session_id,
+    total: formatMoney(row.totalAmount ?? row.total_amount),
+    time: formatTime(row.paidAt ?? row.paid_at),
+    date: formatDate(row.paidAt ?? row.paid_at),
+    sessionId,
   };
 };
 
 const createMenuPayload = (data: MenuCreateInput) => ({
   menu_name: data.name,
+  menu_image: data.image ?? null,
   category_id: data.categoryId ?? null,
   price: Number(data.price),
   availability: data.ok ? 1 : 0,
@@ -362,6 +412,7 @@ export const apiClient = {
       emoji: data.emoji,
       sold: data.sold,
       categoryId: data.categoryId ?? null,
+      image: data.image ?? null,
     })),
     delete: (id: number) => API.delete(`/menus/${id}`),
   },
@@ -442,9 +493,9 @@ export const apiClient = {
         name: row.name === "Table" ? `Table ${row.id}` : row.name,
         seats: toNumber(row.seats, 4),
         status: normalizeTableStatus(row.status),
-        items: orderItemsBySession.get(row.session_id ?? -1) ?? [],
+        items: orderItemsBySession.get(row.sessionId ?? row.session_id ?? -1) ?? [],
         since: row.since,
-        sessionId: row.session_id ?? null,
+        sessionId: row.sessionId ?? row.session_id ?? null,
       }));
     },
     update: (id: number, data: Partial<TableItem>) => API.put(`/tables/${id}`, {
@@ -462,7 +513,7 @@ export const apiClient = {
         API.get<OrderItemRow[]>("/order-items"),
       ]);
 
-      const sessionLookup = new Map<number, SessionRow>(sessionsRes.data.map(row => [row.session_id, row]));
+      const sessionLookup = new Map<number, SessionRow>(sessionsRes.data.map(row => [row.sessionId ?? row.session_id, row]));
       const sessionItems = buildOrderItemMap(ordersRes.data, orderItemsRes.data);
 
       return salesRes.data.map(row => normalizeSale(row, sessionLookup, sessionItems));

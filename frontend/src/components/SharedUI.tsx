@@ -36,7 +36,7 @@ export function StatCard({ label, value, sub, color, icon: Icon }: StatCardProps
     <div style={{ flex: 1, minWidth: 160, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: "20px 22px", display: "flex", flexDirection: "column", gap: 7, position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: -8, right: -8, opacity: 0.04, transform: "scale(3.5)" }}><Icon size={36} color={color} /></div>
       <span style={{ fontSize: 10, color: C.textMid, textTransform: "uppercase", letterSpacing: 1.4 }}>{label}</span>
-      <span style={{ fontSize: 26, fontWeight: 700, color, fontFamily: "'Playfair Display',serif", lineHeight: 1 }}>{value}</span>
+      <span style={{ fontSize: 26, fontWeight: 700, color, fontFamily: "var(--heading)", lineHeight: 1 }}>{value}</span>
       <span style={{ fontSize: 11, color: C.textDim }}>{sub}</span>
     </div>
   );
@@ -54,7 +54,7 @@ export function Modal({ title, onClose, children, width = 480 }: ModalProps) {
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
       <div style={{ background: C.card, border: `1px solid ${C.borderMid}`, borderRadius: 18, width, maxWidth: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 22px", borderBottom: `1px solid ${C.border}` }}>
-          <span style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display',serif" }}>{title}</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "var(--heading)" }}>{title}</span>
           <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", color: C.textDim, padding: 4 }}><X size={16} /></button>
         </div>
         <div style={{ flex: 1, overflow: "auto", padding: "20px 22px" }}>{children}</div>
@@ -63,7 +63,7 @@ export function Modal({ title, onClose, children, width = 480 }: ModalProps) {
   );
 }
 
-const inputStyle: React.CSSProperties = { width: "100%", boxSizing: "border-box", background: C.card2, border: `1px solid ${C.border}`, borderRadius: 9, padding: "9px 12px", color: C.text, fontSize: 13, outline: "none", fontFamily: "'DM Sans',sans-serif" };
+const inputStyle: React.CSSProperties = { width: "100%", boxSizing: "border-box", background: C.card2, border: `1px solid ${C.border}`, borderRadius: 9, padding: "9px 12px", color: C.text, fontSize: 13, outline: "none", fontFamily: "var(--sans)" };
 
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div style={{ marginBottom: 14 }}><div style={{ fontSize: 10, color: C.textMid, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 6 }}>{label}</div>{children}</div>;

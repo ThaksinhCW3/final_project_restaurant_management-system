@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { LayoutDashboard, ShoppingCart, BarChart2, Users, Package, Utensils, ChefHat, Settings, LogOut, Search, Bell, QrCode, Plus, Pencil, Trash2, CheckCircle, AlertTriangle } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, BarChart2, Users, Package, Utensils, ChefHat, Settings, LogOut, Search, Bell, QrCode, Plus, Pencil, Trash2, CheckCircle, AlertTriangle, Image as ImageIcon } from "lucide-react";
 import { C, today, now, uid, CHART_DATA, PIE_DATA, QR_URL, tblTotal } from "./config/constants";
 import { NavBtn, Modal, Inp, Sel, Btn } from "./components/SharedUI";
 import Dashboard from "./views/Dashboard";
 import POS from "./views/POS";
 import type { MenuItem, TableItem, SaleItem, StaffItem, StockItem, SessionItem } from "./types";
 import { apiClient } from "./api/client";
+import './index.css';
 
 type Toast = { id: number; msg: string; type: "success" | "error" | "info" };
 type ModalState = { type: string; title?: string; data: any; msg?: string; onConfirm?: () => void } | null;
@@ -36,13 +37,6 @@ export default function App() {
     const match = String(value ?? "").match(/(\d+)/);
     return match ? Number(match[1]) : null;
   };
-
-  useEffect(() => {
-    const el = document.createElement("link"); el.rel = "stylesheet";
-    el.href = "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap";
-    document.head.appendChild(el);
-    return () => { if (document.head.contains(el)) document.head.removeChild(el); };
-  }, []);
 
   useEffect(() => {
     (async () => {
@@ -435,7 +429,7 @@ export default function App() {
   const titles: Record<string, string> = { dashboard: "ພາບລວມ", pos: "ຈັດການໂຕະ", menu: "ເມນູ", stock: "ຄັງ", billing: "ບິນ", reports: "ລາຍງານ", staff: "ພະນັກ" };
 
   return (
-    <div style={{ display: "flex", height: "100vh", width: "100%", background: C.bg, fontFamily: "'DM Sans',sans-serif", color: C.text, overflow: "hidden" }}>
+    <div style={{ display: "flex", height: "100vh", width: "100%", background: C.bg, fontFamily: "var(--sans)", color: C.text, overflow: "hidden" }}>
       <div style={{ width: 66, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", alignItems: "center", padding: "14px 7px", gap: 3, flexShrink: 0 }}>
         <div style={{ width: 42, height: 42, borderRadius: 12, background: C.goldDim, border: `1px solid ${C.borderMid}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, flexShrink: 0 }}><ChefHat size={20} color={C.gold} /></div>
         {navItems.map(n => <NavBtn key={n.id} icon={n.icon} label={n.label} active={view === n.id} onClick={() => { setView(n.id); setSelTable(null); setShowAddItems(false); }} />)}
@@ -449,7 +443,7 @@ export default function App() {
         <div style={{ padding: "12px 26px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", background: C.sidebar, flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: 9, color: C.textMid, letterSpacing: 1.8, textTransform: "uppercase" }}>ໂໂອເລ້ເຂົ້າຊອຍ ຫຼວງພະບາງ</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display',serif", marginTop: 1 }}>{titles[view]}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "var(--heading)", marginTop: 1 }}>{titles[view]}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.card, border: `1px solid ${C.border}`, borderRadius: 9, padding: "7px 13px" }}><Search size={13} color={C.textDim} /><span style={{ fontSize: 12, color: C.textDim }}>ຄົ້ນຫາ...</span></div>
@@ -503,12 +497,30 @@ export default function App() {
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
                 <div style={{ fontSize: 14, color: C.textMid }}>ເມນູທັງໝົດ</div>
-                <Btn onClick={() => setModal({ type: "menu-form", title: "ເພີ່ມເມນູ", data: { name: "", en: "", price: "", cat: categories[0]?.category_name || categories[0]?.categoryName || "", emoji: "🍜", ok: true } })}><Plus size={14} /> ເພີ່ມເມນູ</Btn>
+                <Btn onClick={() => setModal({ type: "menu-form", title: "ເພີ່ມເມນູ", data: { name: "", en: "", price: "", cat: categories[0]?.category_name || categories[0]?.categoryName || "", emoji: "🍜", image: "", ok: true } })}><Plus size={14} /> ເພີ່ມເມນູ</Btn>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>{menuCategories.map(c => <button key={c} onClick={() => setActiveCat(c)} style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${activeCat === c ? C.gold : C.border}`, background: activeCat === c ? C.goldDim : C.card, color: C.text }}>{c}</button>)}</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 }}>
                 {menu.filter(item => activeCat === "ທັງໝົດ" || item.cat === activeCat).map(item => (
                   <div key={item.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, padding: 18, display: "flex", flexDirection: "column", gap: 9 }}>
+                    <div style={{ height: 118, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: C.card2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                          onError={e => {
+                            const target = e.currentTarget;
+                            target.style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, color: C.textDim }}>
+                          <ImageIcon size={22} />
+                          <span style={{ fontSize: 11 }}>No image</span>
+                        </div>
+                      )}
+                    </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                       <div><div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{item.name}</div><div style={{ fontSize: 11, color: C.textDim }}>{item.en}</div></div>
                       <div style={{ fontSize: 18 }}>{item.emoji}</div>
@@ -519,7 +531,7 @@ export default function App() {
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button onClick={() => toggleOk(item.id)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer" }}>{item.ok ? "ປິດ" : "ເປີດ"}</button>
-                      <button onClick={() => setModal({ type: "menu-form", title: "ແກ້ໄຂເມນູ", data: { ...item, price: String(item.price) } })} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer" }}><Pencil size={14} /> ແກ້ໄຂ</button>
+                      <button onClick={() => setModal({ type: "menu-form", title: "ແກ້ໄຂເມນູ", data: { ...item, price: String(item.price), image: item.image ?? "" } })} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer" }}><Pencil size={14} /> ແກ້ໄຂ</button>
                       <button onClick={() => deleteMenu(item.id, item.name)} style={{ width: 38, background: "rgba(208,64,48,0.12)", border: "1px solid rgba(208,64,48,0.3)", borderRadius: 10, color: C.red, cursor: "pointer" }}><Trash2 size={14} /></button>
                     </div>
                   </div>
@@ -631,6 +643,7 @@ export default function App() {
             <Inp label="ຊື່ອັງກິດ" value={modal.data.en} onChange={e => setField("en", e.target.value)} />
             <Inp label="ລາຄາ (₭)" value={modal.data.price} onChange={e => setField("price", e.target.value)} />
             <Inp label="Emoji" value={modal.data.emoji} onChange={e => setField("emoji", e.target.value)} />
+            <Inp label="Image URL" value={modal.data.image ?? ""} onChange={e => setField("image", e.target.value)} />
           </div>
           <Sel label="ໝວດ" value={modal.data.cat} onChange={e => setField("cat", e.target.value)}>
             {categories.map(c => <option key={c.category_id || c.categoryId} value={c.category_name || c.categoryName || c.name}>{c.category_name || c.categoryName || c.name}</option>)}

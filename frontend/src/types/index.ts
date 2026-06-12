@@ -9,6 +9,7 @@ export interface MenuItem {
   ok: boolean;
   emoji: string;
   categoryId?: number | null;
+  image?: string | null;
 }
 
 export interface StaffItem {
