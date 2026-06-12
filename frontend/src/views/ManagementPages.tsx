@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { Btn } from "../components/SharedUI";
 import { C, CHART_DATA, PIE_DATA } from "../config/constants";
 import type { AppModalState } from "../types/app";
-import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, TableItem } from "../types";
+import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem } from "../types";
 
 type DispatchModal = Dispatch<SetStateAction<AppModalState>>;
 
@@ -314,17 +314,18 @@ export function RecipeView({
 
 export function ReportsView({
   sales,
-  tables,
   revenueTotal,
   activeBillsCount,
-  occupiedTablesCount,
+  pendingBillsCount,
 }: {
   sales: SaleItem[];
-  tables: TableItem[];
   revenueTotal: number;
   activeBillsCount: number;
-  occupiedTablesCount: number;
+  pendingBillsCount: number;
 }) {
+  const occupiedTablesCount = pendingBillsCount;
+  const tables = { length: activeBillsCount };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>

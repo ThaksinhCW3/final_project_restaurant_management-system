@@ -61,15 +61,16 @@ export default function POS({
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(134px,1fr))", gap: 12 }}>
-          {tables.map((t, idx) => {
-            const tot = tblTotal(t, menu);
-            const isSel = selTable === t.id;
-            const isOcc = t.status === "occupied";
+          {sessions.map((session, idx) => {
+            const total = sessionTotal(session, menu);
+            const isSel = selectedSessionId === session.id;
+            const waitingPayment = session.status === "pending_payment";
+            const t = { seats: session.note || "Customer bill" };
             return (
-              <div key={`${t.id}-${t.status}-${idx}`} onClick={() => setSelTable(isSel ? null : t.id)}
-                style={{ background: isSel ? "rgba(232,160,32,0.10)" : C.card, border: `2px solid ${isSel ? C.gold : isOcc ? "rgba(208,64,48,0.33)" : C.border}`, borderRadius: 15, padding: "16px 15px", cursor: "pointer", transition: "all 0.18s", position: "relative" }}>
-                {isOcc && <div style={{ position: "absolute", top: 9, right: 9, width: 7, height: 7, borderRadius: "50%", background: C.red }} />}
-                <div style={{ fontSize: 21, fontWeight: 700, color: isOcc ? C.text : C.textMid, fontFamily: "var(--heading)" }}>{t.name}</div>
+              <div key={`${session.id}-${session.status}-${idx}`} onClick={() => setSelectedSessionId(isSel ? null : session.id)}
+                style={{ background: isSel ? "rgba(232,160,32,0.10)" : C.card, border: `2px solid ${isSel ? C.gold : waitingPayment ? "rgba(208,64,48,0.33)" : C.border}`, borderRadius: 15, padding: "16px 15px", cursor: "pointer", transition: "all 0.18s", position: "relative" }}>
+                {waitingPayment && <div style={{ position: "absolute", top: 9, right: 9, width: 7, height: 7, borderRadius: "50%", background: C.red }} />}
+                <div style={{ fontSize: 21, fontWeight: 700, color: C.text, fontFamily: "var(--heading)" }}>{session.id}</div>
                 <div style={{ fontSize: 10, color: C.textDim, marginTop: 1 }}>{t.seats} ບ່ອນ</div>
                 <div style={{ marginTop: 11 }}>
                   <div style={{ fontSize: 9, color: C.textDim, marginBottom: 2 }}>opened {session.createdAt}</div>
