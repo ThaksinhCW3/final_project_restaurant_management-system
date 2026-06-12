@@ -8,6 +8,7 @@ module.exports = (pool) => {
             SELECT
                 ingredient_id as id,
                 ingredient_name as name,
+                ingredient_image as image,
                 unit,
                 stock_quantity as cur,
                 min_thereshold as min
@@ -21,14 +22,15 @@ module.exports = (pool) => {
 
     // ADD stock item
     router.post('/', (req, res) => {
-        const { name, unit, cur, min } = req.body;
-        const query = 'INSERT INTO ingredients (ingredient_name, unit, stock_quantity, min_thereshold, cost_per_unit) VALUES (?, ?, ?, ?, ?)';
+        const { name, image, unit, cur, min } = req.body;
+        const query = 'INSERT INTO ingredients (ingredient_name, ingredient_image, unit, stock_quantity, min_thereshold, cost_per_unit) VALUES (?, ?, ?, ?, ?, ?)';
 
-        pool.query(query, [name, unit, cur, min, 0], (err, result) => {
+        pool.query(query, [name, image ?? null, unit, cur, min, 0], (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
             res.status(201).json({
                 message: 'Stock item added successfully!',
-                id: result.insertId
+                id: result.insertId,
+                image: image ?? null
             });
         });
     });
@@ -36,10 +38,10 @@ module.exports = (pool) => {
     // UPDATE stock item
     router.put('/:id', (req, res) => {
         const { id } = req.params;
-        const { name, unit, cur, min } = req.body;
-        const query = 'UPDATE ingredients SET ingredient_name = ?, unit = ?, stock_quantity = ?, min_thereshold = ? WHERE ingredient_id = ?';
+        const { name, image, unit, cur, min } = req.body;
+        const query = 'UPDATE ingredients SET ingredient_name = ?, ingredient_image = ?, unit = ?, stock_quantity = ?, min_thereshold = ? WHERE ingredient_id = ?';
 
-        pool.query(query, [name, unit, cur, min, id], (err, result) => {
+        pool.query(query, [name, image ?? null, unit, cur, min, id], (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
             if (result.affectedRows === 0) {
                 return res.status(404).json({ message: 'Stock item not found' });
