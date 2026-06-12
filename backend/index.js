@@ -1,6 +1,7 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
+const { initializeDatabase } = require('./initDb');
 require('dotenv').config();
 
 const app = express();
@@ -60,4 +61,12 @@ app.use('/api/stock', stockRoute);
 
 
 const PORT = 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+initializeDatabase(pool)
+    .then(() => {
+        app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    })
+    .catch((err) => {
+        console.error('Failed to initialize database:', err);
+        process.exit(1);
+    });

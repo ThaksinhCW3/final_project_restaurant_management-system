@@ -103,6 +103,7 @@ type SessionRow = {
   session_id: number;
   sessionType?: "dine-in" | "takeaway" | string | null;
   session_type: "dine-in" | "takeaway" | string | null;
+  note?: string | null;
   tableNumber?: number | null;
   table_number: number | null;
   staffId?: number | null;
@@ -152,9 +153,10 @@ type StockCreateInput = {
 
 type SessionCreateInput = {
   sessionType?: "dine-in" | "takeaway";
+  note?: string;
   tableNumber?: number | string | null;
   staffId?: number | string | null;
-  status?: "active" | "pending_payment" | "Active" | "Completed";
+  status?: "active" | "pending_payment" | "Active" | "PendingPayment" | "Completed";
   endedAt?: string | null;
 };
 
@@ -311,21 +313,44 @@ const normalizeTableStatus = (value: string): "occupied" | "free" =>
   value.toLowerCase() === "free" || value.toLowerCase() === "completed" ? "free" : "occupied";
 
 const toSessionStatus = (value: string | null | undefined): "active" | "pending_payment" =>
-  value === "Completed" ? "pending_payment" : "active";
+  value === "PendingPayment" || value === "pending_payment" ? "pending_payment" : "active";
 
-const normalizeSession = (row: SessionRow, sessionItems: Map<number, OrderItem[]>): SessionItem => {
+const toOrderStatus = (value: string | null | undefined): SessionItem["orderStatus"] => {
+  if (value === "Preparing") return "preparing";
+  if (value === "Served") return "ready";
+  if (value === "Pending") return "pending";
+  return null;
+};
+
+const buildOrderStatusMap = (orders: OrderRow[]): Map<number, SessionItem["orderStatus"]> => {
+  const bySessionId = new Map<number, SessionItem["orderStatus"]>();
+
+  for (const order of orders) {
+    const sessionId = order.session_id ?? order.sessionId ?? null;
+    if (!sessionId || bySessionId.has(sessionId)) continue;
+    bySessionId.set(sessionId, toOrderStatus(order.status));
+  }
+
+  return bySessionId;
+};
+
+const normalizeSession = (
+  row: SessionRow,
+  sessionItems: Map<number, OrderItem[]>,
+  orderStatuses: Map<number, SessionItem["orderStatus"]>,
+): SessionItem => {
   const sessionId = row.sessionId ?? row.session_id;
   const label = sessionLabel(sessionId);
   const itemCount = sessionItems.get(sessionId) ?? [];
   const tableNumber = row.tableNumber ?? row.table_number;
   const sessionType = row.sessionType ?? row.session_type ?? "dine-in";
-  const note = tableNumber ? `Table ${tableNumber}` : sessionType;
+  const note = row.note || (tableNumber ? `Table ${tableNumber}` : sessionType);
 
   return {
     id: label,
     note,
     status: toSessionStatus(row.status),
-    orderStatus: null,
+    orderStatus: orderStatuses.get(sessionId) ?? null,
     items: itemCount,
     createdAt: formatTime(row.startedAt ?? row.started_at),
     payMethod: sessionType as string,
@@ -379,10 +404,11 @@ const createStaffPayload = (data: StaffCreateInput) => {
 
 const createSessionPayload = (data: SessionCreateInput) => ({
   session_type: data.sessionType ?? "dine-in",
+  note: data.note ?? "",
   table_number: data.tableNumber == null || data.tableNumber === "" ? null : Number(data.tableNumber),
   staff_id: data.staffId == null || data.staffId === "" ? null : Number(data.staffId),
   ended_at: data.endedAt ?? null,
-  status: data.status === "Completed" ? "Completed" : "Active",
+  status: data.status === "Completed" ? "Completed" : data.status === "PendingPayment" || data.status === "pending_payment" ? "PendingPayment" : "Active",
 });
 
 const createSalePayload = (data: SaleCreateInput) => {
@@ -537,10 +563,11 @@ export const apiClient = {
       ]);
 
       const sessionItems = buildOrderItemMap(ordersRes.data, orderItemsRes.data);
+      const orderStatuses = buildOrderStatusMap(ordersRes.data);
 
       return sessionsRes.data
-        .filter(row => row.status === "Active" || row.status === null || row.status === undefined)
-        .map(row => normalizeSession(row, sessionItems));
+        .filter(row => row.status === "Active" || row.status === "PendingPayment" || row.status === null || row.status === undefined)
+        .map(row => normalizeSession(row, sessionItems, orderStatuses));
     },
     create: async (data: SessionCreateInput): Promise<SessionItem> => {
       const response = await API.post("/service-sessions", createSessionPayload(data));
@@ -548,7 +575,7 @@ export const apiClient = {
 
       return {
         id: sessionLabel(sessionId),
-        note: `Table ${data.tableNumber ?? "-"}`,
+        note: data.note || (data.tableNumber ? `Table ${data.tableNumber}` : data.sessionType ?? "dine-in"),
         status: "active",
         orderStatus: null,
         items: [],
@@ -562,11 +589,15 @@ export const apiClient = {
     },
     update: (id: string | number, data: SessionUpdateInput) => API.put(`/service-sessions/${parseSessionId(id) ?? id}`, createSessionPayload({
       sessionType: data.sessionType,
+      note: data.note,
       tableNumber: data.tableNumber,
       staffId: data.staffId,
       status: data.status,
       endedAt: data.endedAt,
     })),
+    replaceItems: (id: string | number, items: OrderItem[]) => API.put(`/service-sessions/${parseSessionId(id) ?? id}/items`, {
+      items: items.map(item => ({ menu_id: item.id, quantity: item.qty })),
+    }),
     delete: (id: string | number) => API.delete(`/service-sessions/${parseSessionId(id) ?? id}`),
   },
 };

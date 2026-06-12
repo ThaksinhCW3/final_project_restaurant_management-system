@@ -2,16 +2,16 @@
 import { DollarSign, ShoppingCart, Coffee, Star, TrendingUp } from "lucide-react";
 import { C, kip, today, CHART_DATA, PIE_DATA } from "../config/constants";
 import { StatCard } from "../components/SharedUI";
-import type { SaleItem, TableItem, MenuItem } from "../types";
+import type { SaleItem, MenuItem, SessionItem } from "../types";
 
 interface DashboardProps {
   sales: SaleItem[];
-  tables: TableItem[];
+  sessions: SessionItem[];
   menu: MenuItem[];
 }
 
-export default function Dashboard({ sales, tables, menu }: DashboardProps) {
-  const occupied = tables.filter(t => t.status === "occupied").length;
+export default function Dashboard({ sales, sessions, menu }: DashboardProps) {
+  const pendingPayments = sessions.filter(session => session.status === "pending_payment").length;
   const revenueToday = sales.filter(s => s.date === today()).reduce((sum, sale) => sum + sale.total, 0);
   const openMenus = menu.filter(item => item.ok).length;
 
@@ -20,7 +20,7 @@ export default function Dashboard({ sales, tables, menu }: DashboardProps) {
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
         <StatCard label="ລາຍຮັບມື້ນີ້" value={kip(revenueToday)} sub="ຈາກຍອດຂາຍຈິງ" color={C.gold} icon={DollarSign} />
         <StatCard label="ຍອດຂາຍ" value={String(sales.length)} sub="ທຸລະກຳທັງໝົດ" color={C.green} icon={ShoppingCart} />
-        <StatCard label="ໂຕະທີ່ໃຊ້" value={`${occupied}/${tables.length}`} sub="ໂຕະ" color={C.blue} icon={Coffee} />
+        <StatCard label="QR Bills" value={String(sessions.length)} sub={`${pendingPayments} waiting payment`} color={C.blue} icon={Coffee} />
         <StatCard label="ເມນູທັງໝົດ" value={String(menu.length)} sub={`${openMenus} ລາຍການ ເປີດ`} color={C.amber} icon={Star} />
       </div>
 

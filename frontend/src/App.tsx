@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { LayoutDashboard, ShoppingCart, BarChart2, Users, Package, Utensils, ChefHat, Settings, LogOut, Search, Bell, QrCode, Plus, Pencil, Trash2, CheckCircle, AlertTriangle, Image as ImageIcon } from "lucide-react";
-import { C, today, now, uid, CHART_DATA, PIE_DATA, QR_URL, tblTotal } from "./config/constants";
+import { LayoutDashboard, BarChart2, Users, Package, Utensils, ChefHat, Settings, LogOut, Search, Bell, QrCode, Plus, Pencil, Trash2, CheckCircle, AlertTriangle, Image as ImageIcon } from "lucide-react";
+import { C, today, now, uid, CHART_DATA, PIE_DATA, QR_URL } from "./config/constants";
 import { NavBtn, Modal, Inp, Sel, Btn } from "./components/SharedUI";
 import Dashboard from "./views/Dashboard";
 import POS from "./views/POS";
-import type { MenuItem, TableItem, SaleItem, StaffItem, StockItem, SessionItem } from "./types";
+import type { MenuItem, SaleItem, StaffItem, StockItem, SessionItem } from "./types";
 import { apiClient } from "./api/client";
 import './index.css';
 
@@ -14,14 +14,13 @@ type ModalState = { type: string; title?: string; data: any; msg?: string; onCon
 export default function App() {
   const [view, setView] = useState<string>("dashboard");
   const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [tables, setTables] = useState<TableItem[]>([]);
   const [sales, setSales] = useState<SaleItem[]>([]);
   const [staff, setStaff] = useState<StaffItem[]>([]);
   const [stock, setStock] = useState<StockItem[]>([]);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
 
-  const [selTable, setSelTable] = useState<number | null>(null);
+  const [selSession, setSelSession] = useState<string | null>(null);
   const [activeCat, setActiveCat] = useState<string>("ທັງໝົດ");
   const [showAddItems, setShowAddItems] = useState<boolean>(false);
   const [stockFilter, setStockFilter] = useState<string>("all");
@@ -45,12 +44,11 @@ export default function App() {
         apiClient.staff.getAll(),
         apiClient.stock.getAll(),
         apiClient.sessions.getAll(),
-        apiClient.tables.getAll(),
         apiClient.sales.getAll(),
         apiClient.categories.getAll(),
       ]);
 
-      const [menusRes, staffRes, stockRes, sessionsRes, tablesRes, salesRes, categoriesRes] = results;
+      const [menusRes, staffRes, stockRes, sessionsRes, salesRes, categoriesRes] = results;
 
       if (menusRes.status === "fulfilled") setMenu(menusRes.value || []);
       else console.error("Failed to load menus", menusRes.reason);
@@ -63,9 +61,6 @@ export default function App() {
 
       if (sessionsRes.status === "fulfilled") setSessions(sessionsRes.value || []);
       else console.error("Failed to load sessions", sessionsRes.reason);
-
-      if (tablesRes.status === "fulfilled") setTables(tablesRes.value || []);
-      else console.error("Failed to load tables", tablesRes.reason);
 
       if (salesRes.status === "fulfilled") setSales(salesRes.value || []);
       else console.error("Failed to load sales", salesRes.reason);
@@ -87,80 +82,37 @@ export default function App() {
 
   const setField = (field: string, value: any) => setModal(prev => prev ? { ...prev, data: { ...prev.data, [field]: value } } : prev);
 
-  const addItem = (mid: number) => {
-    setTables(p => p.map(t => {
-      if (t.id !== selTable) return t;
-      const existing = t.items.find(i => i.id === mid);
+  const saveSessionItems = (sessionId: string, updater: (items: SessionItem["items"]) => SessionItem["items"]) => {
+    let nextItems: SessionItem["items"] = [];
+
+    setSessions(prev => prev.map(session => {
+      if (session.id !== sessionId) return session;
+      nextItems = updater(session.items);
+      return { ...session, items: nextItems };
+    }));
+
+    void apiClient.sessions.replaceItems(sessionId, nextItems).catch(err => {
+      console.error("Saving QR bill items failed", err);
+      toast("Could not save bill items", "error");
+    });
+  };
+
+  const addItem = (sessionId: string, mid: number) => {
+    saveSessionItems(sessionId, items => {
+      const existing = items.find(item => item.id === mid);
       return existing
-        ? { ...t, items: t.items.map(i => i.id === mid ? { ...i, qty: i.qty + 1 } : i) }
-        : { ...t, items: [...t.items, { id: mid, qty: 1 }] };
-    }));
+        ? items.map(item => item.id === mid ? { ...item, qty: item.qty + 1 } : item)
+        : [...items, { id: mid, qty: 1 }];
+    });
   };
 
-  const rmItem = (mid: number) => {
-    setTables(p => p.map(t => {
-      if (t.id !== selTable) return t;
-      const existing = t.items.find(i => i.id === mid);
+  const rmItem = (sessionId: string, mid: number) => {
+    saveSessionItems(sessionId, items => {
+      const existing = items.find(item => item.id === mid);
       return existing && existing.qty > 1
-        ? { ...t, items: t.items.map(i => i.id === mid ? { ...i, qty: i.qty - 1 } : i) }
-        : { ...t, items: t.items.filter(i => i.id !== mid) };
-    }));
-  };
-
-  const openTable = async (id: number) => {
-    try {
-      const session = await apiClient.sessions.create({
-        sessionType: "dine-in",
-        tableNumber: id,
-        staffId: null,
-        status: "Active",
-      });
-
-      setSessions(p => [session, ...p]);
-      setTables(p => p.map(t => t.id === id ? { ...t, status: "occupied", since: now(), sessionId: parseSessionId(session.id) ?? t.sessionId ?? null } : t));
-      toast(`ເປີດໃຊ້ ${id} ສຳເລັດ`, "success");
-    } catch (err) {
-      console.error('Open table failed', err);
-      toast("ຜິດພາດ", "error");
-    }
-  };
-
-  const checkout = async (id: number) => {
-    const table = tables.find(x => x.id === id);
-    if (!table) return;
-    const total = tblTotal(table, menu);
-    try {
-      await apiClient.sales.create({
-        table: table.name,
-        items: table.items.length,
-        total,
-        time: now(),
-        date: today(),
-        sessionId: table.sessionId ?? parseSessionId(table.name),
-      });
-
-      if (table.sessionId) {
-        await apiClient.sessions.update(table.sessionId, {
-          sessionType: "dine-in",
-          tableNumber: table.id,
-          staffId: null,
-          status: "Completed",
-          endedAt: new Date().toISOString(),
-        });
-      }
-
-      setSales(p => [{ id: uid(p), table: table.name, items: table.items.length, total, time: now(), date: today(), sessionId: table.sessionId ?? null }, ...p]);
-      setTables(p => p.map(x => x.id === id ? { ...x, status: "free" as const, items: [], since: null, sessionId: null } : x));
-      if (table.sessionId) {
-        setSessions(p => p.filter(s => parseSessionId(s.id) !== table.sessionId));
-      }
-      setSelTable(null);
-      setShowAddItems(false);
-      toast(`ຊຳລະໂຕະ ${table.name} ສຳເລັດ`, "success");
-    } catch (err) {
-      console.error('Checkout failed', err);
-      toast("ຜິດພາດ", "error");
-    }
+        ? items.map(item => item.id === mid ? { ...item, qty: item.qty - 1 } : item)
+        : items.filter(item => item.id !== mid);
+    });
   };
 
   const toggleOk = async (id: number) => {
@@ -329,15 +281,18 @@ export default function App() {
   const submitSession = async () => {
     if (!modal?.data) return;
     const data = modal.data;
+    const note = String(data.note ?? "").trim();
     try {
       const created = await apiClient.sessions.create({
         sessionType: data.sessionType ?? "dine-in",
-        tableNumber: data.tableNumber ?? null,
+        note,
+        tableNumber: null,
         staffId: data.staffId ?? null,
         status: "Active",
       });
       setSessions(p => [created, ...p]);
-      setModal(null);
+      setSelSession(created.id);
+      setModal({ type: "qr-display", title: `QR Bill ${created.id}`, data: created });
       toast(`ສ້າງ ${created.id} ສຳເລັດ`, "success");
     } catch (err) {
       console.error('Session creation failed', err);
@@ -345,9 +300,24 @@ export default function App() {
     }
   };
 
-  const requestPayment = (id: string) => {
-    setSessions(p => p.map(x => x.id === id ? { ...x, status: "pending_payment", orderStatus: null } : x));
-    toast(`ຂໍການຊໍາລະ ${id}`, "info");
+  const requestPayment = async (id: string) => {
+    const session = sessions.find(x => x.id === id);
+    if (!session) return;
+
+    try {
+      await apiClient.sessions.update(id, {
+        sessionType: session.sessionType ?? "dine-in",
+        note: session.note,
+        tableNumber: null,
+        staffId: session.staffId ?? null,
+        status: "PendingPayment",
+      });
+      setSessions(p => p.map(x => x.id === id ? { ...x, status: "pending_payment", orderStatus: null } : x));
+      toast(`Payment requested for ${id}`, "info");
+    } catch (err) {
+      console.error("Payment request failed", err);
+      toast("Could not request payment", "error");
+    }
   };
 
   const confirmPayment = async (id: string) => {
@@ -360,13 +330,15 @@ export default function App() {
         items: session.items.length,
         total,
         time: now(),
-        date: today()
+        date: today(),
+        sessionId: parseSessionId(session.id),
       });
       const sessionNumericId = parseSessionId(session.id);
       if (sessionNumericId !== null) {
         await apiClient.sessions.update(sessionNumericId, {
           sessionType: session.sessionType ?? "dine-in",
-          tableNumber: session.tableNumber ?? null,
+          note: session.note,
+          tableNumber: null,
           staffId: session.staffId ?? null,
           status: "Completed",
           endedAt: new Date().toISOString(),
@@ -374,6 +346,8 @@ export default function App() {
       }
       setSales(p => [{ id: uid(p), table: session.id, items: session.items.length, total, time: now(), date: today(), sessionId: sessionNumericId }, ...p]);
       setSessions(p => p.filter(x => x.id !== id));
+      setSelSession(null);
+      setShowAddItems(false);
       setModal(null);
       toast(`ຊໍາລະ ${id} ສຳເລັດ`, "success");
     } catch (err) {
@@ -394,13 +368,16 @@ export default function App() {
         if (sessionNumericId !== null && session) {
           await apiClient.sessions.update(sessionNumericId, {
             sessionType: session.sessionType ?? "dine-in",
-            tableNumber: session.tableNumber ?? null,
+            note: session.note,
+            tableNumber: null,
             staffId: session.staffId ?? null,
             status: "Completed",
             endedAt: new Date().toISOString(),
           });
         }
         setSessions(p => p.filter(s => s.id !== id));
+        setSelSession(null);
+        setShowAddItems(false);
         setModal(null);
         toast(`ຍົກເລີກ ${id}`, "info");
       } catch (err) {
@@ -413,26 +390,108 @@ export default function App() {
   const menuCategories = ["ທັງໝົດ", ...categories.map(c => c.category_name || c.categoryName || c.name)];
 
   const revenueTotal = sales.reduce((sum, sale) => sum + sale.total, 0);
-  const occupiedTablesCount = tables.filter(t => t.status === "occupied").length;
   const activeBillsCount = sessions.length;
+  const pendingBillsCount = sessions.filter(session => session.status === "pending_payment").length;
 
   const navItems = [
-    { id: "dashboard", icon: LayoutDashboard, label: "ຫຼັກ" },
-    { id: "pos", icon: ShoppingCart, label: "POS" },
-    { id: "menu", icon: Utensils, label: "ເມນູ" },
-    { id: "stock", icon: Package, label: "ຄັງ" },
-    { id: "billing", icon: QrCode, label: "Bill" },
-    { id: "reports", icon: BarChart2, label: "ລາຍງານ" },
-    { id: "staff", icon: Users, label: "ພະນັກ" },
+    { id: "dashboard", icon: LayoutDashboard, label: "Home" },
+    { id: "pos", icon: QrCode, label: "QR" },
+    { id: "menu", icon: Utensils, label: "Menu" },
+    { id: "stock", icon: Package, label: "Stock" },
+    { id: "reports", icon: BarChart2, label: "Reports" },
+    { id: "staff", icon: Users, label: "Staff" },
   ];
 
-  const titles: Record<string, string> = { dashboard: "ພາບລວມ", pos: "ຈັດການໂຕະ", menu: "ເມນູ", stock: "ຄັງ", billing: "ບິນ", reports: "ລາຍງານ", staff: "ພະນັກ" };
+  const titles: Record<string, string> = { dashboard: "Overview", pos: "QR Bills", menu: "Menu", stock: "Stock", billing: "Bills", reports: "Reports", staff: "Staff" };
+  const billId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("bill") : null;
+  const customerSession = billId ? sessions.find(session => session.id.toLowerCase() === billId.toLowerCase()) : null;
+
+  if (billId) {
+    const total = customerSession?.items.reduce((sum, item) => {
+      const menuItem = menu.find(entry => entry.id === item.id);
+      return sum + (menuItem ? menuItem.price * item.qty : 0);
+    }, 0) ?? 0;
+
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "var(--sans)", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "18px 22px", borderBottom: `1px solid ${C.border}`, background: C.sidebar, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, color: C.textMid, letterSpacing: 1.8, textTransform: "uppercase" }}>Olay Khao Soi</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "var(--heading)" }}>Bill {billId}</div>
+            {customerSession && <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>{customerSession.note || "Customer QR menu"}</div>}
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 10, color: C.textDim }}>Total</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: C.gold }}>{total.toLocaleString("en")} ₭</div>
+          </div>
+        </div>
+
+        {!loaded ? (
+          <div style={{ padding: 24, color: C.textDim }}>Loading menu...</div>
+        ) : !customerSession ? (
+          <div style={{ margin: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 22, color: C.textDim }}>
+            This QR bill is closed or no longer available.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: 18, padding: 22, alignItems: "start" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 14 }}>
+              {menu.filter(item => item.ok).map(item => (
+                <div key={item.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{item.name}</div>
+                      <div style={{ fontSize: 11, color: C.textDim }}>{item.en}</div>
+                    </div>
+                    <div style={{ fontSize: 22 }}>{item.emoji}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: C.gold }}>{item.price.toLocaleString("en")} ₭</span>
+                    <button onClick={() => addItem(customerSession.id, item.id)} style={{ background: C.goldDim, border: `1px solid ${C.borderMid}`, color: C.gold, padding: "8px 12px", borderRadius: 9, cursor: "pointer", fontWeight: 700 }}>Add</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ background: C.sidebar, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, position: "sticky", top: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 12 }}>Your bill</div>
+              {customerSession.items.length === 0 && <div style={{ fontSize: 13, color: C.textDim, padding: "14px 0" }}>No items yet.</div>}
+              {customerSession.items.map(item => {
+                const menuItem = menu.find(entry => entry.id === item.id);
+                if (!menuItem) return null;
+
+                return (
+                  <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, borderTop: `1px solid ${C.border}`, padding: "10px 0" }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>{menuItem.name}</div>
+                      <div style={{ fontSize: 11, color: C.textDim }}>{menuItem.price.toLocaleString("en")} ₭</div>
+                    </div>
+                    <button onClick={() => rmItem(customerSession.id, item.id)} style={{ width: 26, height: 26, borderRadius: "50%", background: "rgba(208,64,48,0.12)", border: "1px solid rgba(208,64,48,0.28)", color: C.red, cursor: "pointer" }}>-</button>
+                    <span style={{ minWidth: 20, textAlign: "center", fontWeight: 700 }}>{item.qty}</span>
+                    <button onClick={() => addItem(customerSession.id, item.id)} style={{ width: 26, height: 26, borderRadius: "50%", background: C.goldDim, border: `1px solid ${C.borderMid}`, color: C.gold, cursor: "pointer" }}>+</button>
+                  </div>
+                );
+              })}
+              {customerSession.status === "active" ? (
+                <button onClick={() => requestPayment(customerSession.id)} style={{ width: "100%", marginTop: 14, padding: "11px", background: `linear-gradient(135deg,${C.gold},${C.amber})`, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, cursor: "pointer" }}>
+                  Request payment
+                </button>
+              ) : (
+                <div style={{ marginTop: 14, padding: 11, background: C.goldDim, border: `1px solid ${C.borderMid}`, borderRadius: 10, color: C.gold, textAlign: "center", fontWeight: 700 }}>
+                  Waiting for staff confirmation
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", height: "100vh", width: "100%", background: C.bg, fontFamily: "var(--sans)", color: C.text, overflow: "hidden" }}>
       <div style={{ width: 66, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", alignItems: "center", padding: "14px 7px", gap: 3, flexShrink: 0 }}>
         <div style={{ width: 42, height: 42, borderRadius: 12, background: C.goldDim, border: `1px solid ${C.borderMid}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, flexShrink: 0 }}><ChefHat size={20} color={C.gold} /></div>
-        {navItems.map(n => <NavBtn key={n.id} icon={n.icon} label={n.label} active={view === n.id} onClick={() => { setView(n.id); setSelTable(null); setShowAddItems(false); }} />)}
+        {navItems.map(n => <NavBtn key={n.id} icon={n.icon} label={n.label} active={view === n.id} onClick={() => { setView(n.id); setSelSession(null); setShowAddItems(false); }} />)}
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 9, color: loaded ? C.green : C.amber, textAlign: "center", paddingBottom: 6, letterSpacing: 0.5 }}>{loaded ? "● saved" : "● ..."}</div>
         <NavBtn icon={Settings} label="ຕັ້ງຄ່າ" active={false} onClick={() => { }} />
@@ -453,8 +512,24 @@ export default function App() {
         </div>
 
         <div style={{ flex: 1, overflow: "auto", padding: view === "pos" ? 0 : "22px 26px" }}>
-          {view === "dashboard" && <Dashboard sales={sales} tables={tables} menu={menu} />}
-          {view === "pos" && <POS tables={tables} menu={menu} selTable={selTable} setSelTable={setSelTable} showAddItems={showAddItems} setShowAddItems={setShowAddItems} addItem={addItem} rmItem={rmItem} openTable={openTable} checkout={checkout} />}
+          {view === "dashboard" && <Dashboard sales={sales} sessions={sessions} menu={menu} />}
+          {view === "pos" && (
+            <POS
+              sessions={sessions}
+              menu={menu}
+              selectedSessionId={selSession}
+              setSelectedSessionId={setSelSession}
+              showAddItems={showAddItems}
+              setShowAddItems={setShowAddItems}
+              createBill={() => setModal({ type: "session-form", title: "Generate QR Bill", data: { sessionType: "dine-in", note: "", staffId: "" } })}
+              showQr={session => setModal({ type: "qr-display", title: `QR Bill ${session.id}`, data: session })}
+              addItem={addItem}
+              rmItem={rmItem}
+              requestPayment={requestPayment}
+              confirmPayment={confirmPayment}
+              cancelSession={cancelSession}
+            />
+          )}
           {view === "billing" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
@@ -573,7 +648,7 @@ export default function App() {
           {view === "reports" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {[{ label: "ລາຍຮັບລວມ", value: `${revenueTotal.toLocaleString("en")} ₭`, extra: "ຈາກບິນຈິງ", color: C.gold }, { label: "ໃບບິນ", value: `${activeBillsCount}`, extra: "ບິນເປີດ", color: C.green }, { label: "ໂຕະທີ່ໃຊ້", value: `${occupiedTablesCount}/${tables.length}`, extra: "ໂຕະທີ່ກຳລັງໃຊ້", color: C.blue }].map(item => (
+                {[{ label: "Total revenue", value: `${revenueTotal.toLocaleString("en")} ?`, extra: "from completed bills", color: C.gold }, { label: "Open QR bills", value: `${activeBillsCount}`, extra: "active sessions", color: C.green }, { label: "Waiting payment", value: `${pendingBillsCount}`, extra: "needs staff confirmation", color: C.blue }].map(item => (
                   <div key={item.label} style={{ flex: 1, minWidth: 140, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
                     <div style={{ fontSize: 10, color: C.textMid, textTransform: "uppercase", letterSpacing: 1.4 }}>{item.label}</div>
                     <div style={{ fontSize: 22, fontWeight: 700, color: C.text, marginTop: 7 }}>{item.value}</div>
@@ -665,16 +740,14 @@ export default function App() {
       )}
 
       {modal?.type === "session-form" && (
-        <Modal title={modal.title ?? "Bill"} onClose={() => setModal(null)}>
-          <Sel label="ປະເພດເຊດຊັນ" value={modal.data.sessionType} onChange={e => setField("sessionType", e.target.value)}>
-            <option value="dine-in">ທານທີ່ຮ້ານ</option>
-            <option value="takeaway">ກັບບ້ານ</option>
+        <Modal title={modal.title ?? "Generate QR Bill"} onClose={() => setModal(null)}>
+          <Sel label="Session type" value={modal.data.sessionType} onChange={e => setField("sessionType", e.target.value)}>
+            <option value="dine-in">Dine in</option>
+            <option value="takeaway">Takeaway</option>
           </Sel>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
-            <Inp label="ເລກໂຕະ" type="number" value={modal.data.tableNumber} onChange={e => setField("tableNumber", e.target.value)} />
-            <Inp label="Staff ID" type="number" value={modal.data.staffId} onChange={e => setField("staffId", e.target.value)} />
-          </div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}><Btn variant="secondary" onClick={() => setModal(null)}>ຍົກເລີກ</Btn><Btn onClick={submitSession}>ບັນທຶກ</Btn></div>
+          <Inp label="Customer / group note" value={modal.data.note} onChange={e => setField("note", e.target.value)} placeholder="1 person, 4 people, window seat..." />
+          <Inp label="Staff ID" type="number" value={modal.data.staffId} onChange={e => setField("staffId", e.target.value)} />
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}><Btn variant="secondary" onClick={() => setModal(null)}>Cancel</Btn><Btn onClick={submitSession}><QrCode size={14} /> Generate QR</Btn></div>
         </Modal>
       )}
 
@@ -728,3 +801,4 @@ export default function App() {
     </div>
   );
 }
+

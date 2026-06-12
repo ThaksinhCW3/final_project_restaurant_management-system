@@ -6,26 +6,21 @@ module.exports = (pool) => {
     router.get('/', (req, res) => {
         const query = `
             SELECT
-                table_number as id,
-                'Table' as name,
-                4 as seats,
-                COALESCE(status, 'free') as status,
-                '[]' as items,
-                started_at as since,
-                session_id
-            FROM service_sessions
-            WHERE status = 'Active' OR status IS NULL
-            UNION
-            SELECT
-                @row := @row + 1 as id,
-                CONCAT('Table ', @row) as name,
-                4 as seats,
-                'free' as status,
-                '[]' as items,
-                NULL as since,
-                NULL as session_id
-            FROM (SELECT @row := 0) t
-            LIMIT 10
+                base.table_number AS id,
+                CONCAT('Table ', base.table_number) AS name,
+                4 AS seats,
+                CASE WHEN service_sessions.session_id IS NULL THEN 'free' ELSE 'occupied' END AS status,
+                '[]' AS items,
+                service_sessions.started_at AS since,
+                service_sessions.session_id
+            FROM (
+                SELECT 1 AS table_number UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
+                UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10
+            ) AS base
+            LEFT JOIN service_sessions
+                ON service_sessions.table_number = base.table_number
+                AND (service_sessions.status = 'Active' OR service_sessions.status IS NULL)
+            ORDER BY base.table_number
         `;
         pool.query(query, (err, results) => {
             if (err) return res.status(500).json({ error: err.message });
