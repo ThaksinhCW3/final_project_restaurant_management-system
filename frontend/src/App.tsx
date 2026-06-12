@@ -442,7 +442,7 @@ export default function App() {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ padding: "12px 26px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", background: C.sidebar, flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: 9, color: C.textMid, letterSpacing: 1.8, textTransform: "uppercase" }}>ໂໂອເລ້ເຂົ້າຊອຍ ຫຼວງພະບາງ</div>
+            <div style={{ fontSize: 9, color: C.textMid, letterSpacing: 1.8, textTransform: "uppercase" }}>ໂອເລ້ເຂົ້າຊອຍ ຫຼວງພະບາງ</div>
             <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "var(--heading)", marginTop: 1 }}>{titles[view]}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

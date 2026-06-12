@@ -1,4 +1,4 @@
-import { mysqlTable, mysqlSchema, AnyMySqlColumn, primaryKey, int, varchar, index, foreignKey, decimal, datetime, text, mysqlEnum, unique } from "drizzle-orm/mysql-core"
+import { mysqlTable, mysqlSchema, AnyMySqlColumn, primaryKey, int, varchar, index, foreignKey, decimal, datetime, text, tinyint, mysqlEnum, unique } from "drizzle-orm/mysql-core"
 import { sql } from "drizzle-orm"
 
 export const categories = mysqlTable("categories", {
