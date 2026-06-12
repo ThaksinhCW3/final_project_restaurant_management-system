@@ -38,7 +38,7 @@ export const imports = mysqlTable("imports", {
 export const ingredients = mysqlTable("ingredients", {
 	ingredientId: int("ingredient_id").autoincrement().notNull(),
 	ingredientName: varchar("ingredient_name", { length: 150 }).notNull(),
-	ingredientImage: varchar("ingredient_image", { length: 255 }),
+	ingredientImage: text("ingredient_image"),
 	stockQuantity: decimal("stock_quantity", { precision: 10, scale: 2 }).default('0.00'),
 	unit: mysqlEnum(['kg','g','pcs']),
 	costPerUnit: decimal("cost_per_unit", { precision: 10, scale: 2 }).default('0.00'),

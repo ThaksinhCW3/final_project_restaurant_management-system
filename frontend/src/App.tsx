@@ -155,7 +155,7 @@ export default function App() {
       prev ? { ...prev, data: { ...prev.data, [field]: value } } : prev,
     );
 
-  const handleMenuImageUpload = async (file: File | null) => {
+  const handleImageUpload = async (file: File | null, field = "image") => {
     if (!file) return;
     const image = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -184,7 +184,7 @@ export default function App() {
     });
 
     setModal((prev) =>
-      prev ? { ...prev, data: { ...prev.data, image } } : prev,
+      prev ? { ...prev, data: { ...prev.data, [field]: image } } : prev,
     );
   };
 
@@ -1012,7 +1012,7 @@ export default function App() {
                 type="file"
                 accept="image/*"
                 onChange={(e) =>
-                  void handleMenuImageUpload(e.currentTarget.files?.[0] ?? null)
+                  void handleImageUpload(e.currentTarget.files?.[0] ?? null)
                 }
                 style={{
                   width: "100%",
@@ -1205,6 +1205,61 @@ export default function App() {
             value={modal.data.name}
             onChange={(e) => setField("name", e.target.value)}
           />
+          <div style={{ marginBottom: 14 }}>
+            <div
+              style={{
+                fontSize: 10,
+                color: C.textMid,
+                textTransform: "uppercase",
+                letterSpacing: 1.2,
+                marginBottom: 6,
+              }}
+            >
+              Image
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) =>
+                void handleImageUpload(e.currentTarget.files?.[0] ?? null)
+              }
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                background: C.card2,
+                border: `1px solid ${C.border}`,
+                borderRadius: 9,
+                padding: "9px 12px",
+                color: C.text,
+                fontSize: 13,
+                outline: "none",
+                fontFamily: "var(--sans)",
+              }}
+            />
+            {modal.data.image ? (
+              <div
+                style={{
+                  marginTop: 10,
+                  height: 140,
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  border: `1px solid ${C.border}`,
+                  background: C.card2,
+                }}
+              >
+                <img
+                  src={modal.data.image}
+                  alt="Ingredient preview"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
           <div
             style={{
               display: "grid",

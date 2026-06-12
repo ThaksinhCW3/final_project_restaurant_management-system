@@ -48,6 +48,8 @@ type StaffRow = {
 type StockRow = {
   id: number;
   name: string;
+  image?: string | null;
+  ingredient_image?: string | null;
   unit: string;
   cur: string | number;
   min: string | number;
@@ -182,6 +184,7 @@ type StockCreateInput = {
   unit: string;
   cur: number | string;
   min: number | string;
+  image?: string | null;
 };
 
 type RecipeCreateInput = {
@@ -343,6 +346,7 @@ const normalizeStaff = (row: StaffRow): StaffItem => ({
 const normalizeStock = (row: StockRow): StockItem => ({
   id: row.id,
   name: row.name,
+  image: row.image ?? row.ingredient_image ?? null,
   unit: row.unit,
   cur: toNumber(row.cur, 0),
   min: toNumber(row.min, 0),
@@ -533,12 +537,14 @@ export const apiClient = {
     },
     create: (data: StockCreateInput) => API.post("/stock", {
       name: data.name,
+      image: data.image ?? null,
       unit: data.unit,
       cur: Number(data.cur),
       min: Number(data.min),
     }),
     update: (id: number, data: Partial<StockCreateInput>) => API.put(`/stock/${id}`, {
       name: data.name ?? "",
+      image: data.image ?? null,
       unit: data.unit ?? "kg",
       cur: Number(data.cur ?? 0),
       min: Number(data.min ?? 0),

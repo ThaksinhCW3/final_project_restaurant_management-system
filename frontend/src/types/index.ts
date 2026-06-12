@@ -29,6 +29,7 @@ export interface StockItem {
   unit: string;
   cur: number;
   min: number;
+  image?: string | null;
 }
 
 export interface IngredientItem {
