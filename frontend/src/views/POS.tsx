@@ -34,12 +34,12 @@ export default function POS({
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(134px,1fr))", gap: 12 }}>
-          {tables.map(t => {
+          {tables.map((t, idx) => {
             const tot = tblTotal(t, menu);
             const isSel = selTable === t.id;
             const isOcc = t.status === "occupied";
             return (
-              <div key={t.id} onClick={() => setSelTable(isSel ? null : t.id)}
+              <div key={`${t.id}-${t.status}-${idx}`} onClick={() => setSelTable(isSel ? null : t.id)}
                 style={{ background: isSel ? "rgba(232,160,32,0.10)" : C.card, border: `2px solid ${isSel ? C.gold : isOcc ? "rgba(208,64,48,0.33)" : C.border}`, borderRadius: 15, padding: "16px 15px", cursor: "pointer", transition: "all 0.18s", position: "relative" }}>
                 {isOcc && <div style={{ position: "absolute", top: 9, right: 9, width: 7, height: 7, borderRadius: "50%", background: C.red }} />}
                 <div style={{ fontSize: 21, fontWeight: 700, color: isOcc ? C.text : C.textMid, fontFamily: "var(--heading)" }}>{t.name}</div>

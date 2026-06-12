@@ -53,7 +53,7 @@ export const ingredients = mysqlTable("ingredients", {
 export const menus = mysqlTable("menus", {
 	menuId: int("menu_id").autoincrement().notNull(),
 	menuName: varchar("menu_name", { length: 150 }).notNull(),
-	menuImage: varchar("menu_image", { length: 255 }),
+	menuImage: text("menu_image"),
 	categoryId: int("category_id").references(() => categories.categoryId, { onDelete: "set null" } ),
 	price: decimal({ precision: 10, scale: 2 }).notNull(),
 	availability: tinyint().default(1),
