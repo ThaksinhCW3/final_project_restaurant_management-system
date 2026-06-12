@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { MenuItem, SaleItem, SessionItem, StaffItem, StockItem, TableItem, OrderItem } from "../types";
+import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, TableItem, OrderItem } from "../types";
 import { now, today } from "../config/constants";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000/api";
@@ -51,6 +51,40 @@ type StockRow = {
   unit: string;
   cur: string | number;
   min: string | number;
+};
+
+type IngredientRow = {
+  ingredientId?: number;
+  ingredient_id?: number;
+  ingredientName?: string;
+  ingredient_name?: string;
+  ingredientImage?: string | null;
+  ingredient_image?: string | null;
+  stockQuantity?: string | number | null;
+  stock_quantity?: string | number | null;
+  unit?: string | null;
+  costPerUnit?: string | number | null;
+  cost_per_unit?: string | number | null;
+  minThreshold?: string | number | null;
+  min_thereshold?: string | number | null;
+  supplierId?: number | null;
+  supplier_id?: number | null;
+};
+
+type RecipeRow = {
+  recipeId?: number;
+  recipe_id?: number;
+  menuId?: number;
+  menu_id?: number;
+  menuName?: string;
+  menu_name?: string;
+  ingredientId?: number;
+  ingredient_id?: number;
+  ingredientName?: string;
+  ingredient_name?: string;
+  quantityUsed?: string | number;
+  quantity_used?: string | number;
+  unit?: string | null;
 };
 
 type TableRow = {
@@ -149,6 +183,13 @@ type StockCreateInput = {
   unit: string;
   cur: number | string;
   min: number | string;
+};
+
+type RecipeCreateInput = {
+  id?: number;
+  menuId: number | string;
+  ingredientId: number | string;
+  quantityUsed: number | string;
 };
 
 type SessionCreateInput = {
@@ -280,7 +321,7 @@ const buildOrderItemMap = (orders: OrderRow[], items: OrderItemRow[]): Map<numbe
 const normalizeMenu = (row: MenuRow): MenuItem => ({
   id: row.menuId ?? row.menu_id ?? 0,
   name: row.menuName ?? row.menu_name ?? "",
-  en: row.menuImage ?? row.menu_image ?? row.categoryName ?? row.category_name ?? "Menu item",
+  en: row.menuName ?? row.menu_name ?? row.categoryName ?? row.category_name ?? "Menu item",
   price: formatMoney(row.price),
   cat: row.categoryName ?? row.category_name ?? "ອື່ນໆ",
   sold: 0,
@@ -307,6 +348,27 @@ const normalizeStock = (row: StockRow): StockItem => ({
   unit: row.unit,
   cur: toNumber(row.cur, 0),
   min: toNumber(row.min, 0),
+});
+
+const normalizeIngredient = (row: IngredientRow): IngredientItem => ({
+  id: row.ingredientId ?? row.ingredient_id ?? 0,
+  name: row.ingredientName ?? row.ingredient_name ?? "",
+  image: row.ingredientImage ?? row.ingredient_image ?? null,
+  stockQuantity: toNumber(row.stockQuantity ?? row.stock_quantity, 0),
+  unit: row.unit ?? "pcs",
+  costPerUnit: toNumber(row.costPerUnit ?? row.cost_per_unit, 0),
+  minThreshold: toNumber(row.minThreshold ?? row.min_thereshold, 0),
+  supplierId: row.supplierId ?? row.supplier_id ?? null,
+});
+
+const normalizeRecipe = (row: RecipeRow): RecipeItem => ({
+  id: row.recipeId ?? row.recipe_id ?? 0,
+  menuId: row.menuId ?? row.menu_id ?? 0,
+  menuName: row.menuName ?? row.menu_name ?? "Menu item",
+  ingredientId: row.ingredientId ?? row.ingredient_id ?? 0,
+  ingredientName: row.ingredientName ?? row.ingredient_name ?? "Ingredient",
+  quantityUsed: toNumber(row.quantityUsed ?? row.quantity_used, 0),
+  unit: row.unit ?? null,
 });
 
 const normalizeTableStatus = (value: string): "occupied" | "free" =>
@@ -421,6 +483,12 @@ const createSalePayload = (data: SaleCreateInput) => {
   };
 };
 
+const createRecipePayload = (data: RecipeCreateInput) => ({
+  menu_id: Number(data.menuId),
+  ingredient_id: Number(data.ingredientId),
+  quantity_used: Number(data.quantityUsed),
+});
+
 export const apiClient = {
   menus: {
     getAll: async (): Promise<MenuItem[]> => {
@@ -502,6 +570,23 @@ export const apiClient = {
       min: Number(data.min ?? 0),
     }),
     delete: (id: number) => API.delete(`/stock/${id}`),
+  },
+
+  ingredients: {
+    getAll: async (): Promise<IngredientItem[]> => {
+      const response = await API.get<IngredientRow[]>("/ingredients");
+      return response.data.map(normalizeIngredient);
+    },
+  },
+
+  recipes: {
+    getAll: async (): Promise<RecipeItem[]> => {
+      const response = await API.get<RecipeRow[]>("/recipes");
+      return response.data.map(normalizeRecipe);
+    },
+    create: (data: RecipeCreateInput) => API.post("/recipes", createRecipePayload(data)),
+    update: (id: number, data: RecipeCreateInput) => API.put(`/recipes/${id}`, createRecipePayload(data)),
+    delete: (id: number) => API.delete(`/recipes/${id}`),
   },
 
   tables: {

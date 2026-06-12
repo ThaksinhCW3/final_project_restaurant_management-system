@@ -31,6 +31,27 @@ export interface StockItem {
   min: number;
 }
 
+export interface IngredientItem {
+  id: number;
+  name: string;
+  image?: string | null;
+  stockQuantity: number;
+  unit: string;
+  costPerUnit: number;
+  minThreshold: number;
+  supplierId?: number | null;
+}
+
+export interface RecipeItem {
+  id: number;
+  menuId: number;
+  menuName: string;
+  ingredientId: number;
+  ingredientName: string;
+  quantityUsed: number;
+  unit?: string | null;
+}
+
 export interface OrderItem {
   id: number;
   qty: number;

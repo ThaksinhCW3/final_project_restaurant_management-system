@@ -60,24 +60,17 @@ export default function POS({
           </button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 12 }}>
-          {sessions.map(session => {
-            const total = sessionTotal(session, menu);
-            const isSelected = selectedSessionId === session.id;
-            const waitingPayment = session.status === "pending_payment";
-
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(134px,1fr))", gap: 12 }}>
+          {tables.map((t, idx) => {
+            const tot = tblTotal(t, menu);
+            const isSel = selTable === t.id;
+            const isOcc = t.status === "occupied";
             return (
-              <div
-                key={session.id}
-                onClick={() => {
-                  setSelectedSessionId(isSelected ? null : session.id);
-                  setShowAddItems(false);
-                }}
-                style={{ background: isSelected ? "rgba(211,47,47,0.10)" : C.card, border: `2px solid ${isSelected ? C.gold : waitingPayment ? C.gold : C.border}`, borderRadius: 15, padding: "16px 15px", cursor: "pointer", transition: "all 0.18s", position: "relative" }}
-              >
-                {waitingPayment && <div style={{ position: "absolute", top: 9, right: 9, width: 7, height: 7, borderRadius: "50%", background: C.gold }} />}
-                <div style={{ fontSize: 21, fontWeight: 700, color: C.text, fontFamily: "var(--heading)" }}>{session.id}</div>
-                <div style={{ fontSize: 10, color: C.textDim, marginTop: 1 }}>{session.note || "QR customer"}</div>
+              <div key={`${t.id}-${t.status}-${idx}`} onClick={() => setSelTable(isSel ? null : t.id)}
+                style={{ background: isSel ? "rgba(232,160,32,0.10)" : C.card, border: `2px solid ${isSel ? C.gold : isOcc ? "rgba(208,64,48,0.33)" : C.border}`, borderRadius: 15, padding: "16px 15px", cursor: "pointer", transition: "all 0.18s", position: "relative" }}>
+                {isOcc && <div style={{ position: "absolute", top: 9, right: 9, width: 7, height: 7, borderRadius: "50%", background: C.red }} />}
+                <div style={{ fontSize: 21, fontWeight: 700, color: isOcc ? C.text : C.textMid, fontFamily: "var(--heading)" }}>{t.name}</div>
+                <div style={{ fontSize: 10, color: C.textDim, marginTop: 1 }}>{t.seats} ບ່ອນ</div>
                 <div style={{ marginTop: 11 }}>
                   <div style={{ fontSize: 9, color: C.textDim, marginBottom: 2 }}>opened {session.createdAt}</div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, fontFamily: "var(--sans)" }}>{kip(total)}</div>
