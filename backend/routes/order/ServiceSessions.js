@@ -1,6 +1,17 @@
 const express = require('express');
 const router = express.Router();
 
+const toMysqlDateTime = (value) => {
+    if (!value) return null;
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return String(value).includes('T') ? String(value).slice(0, 19).replace('T', ' ') : value;
+    }
+
+    return parsed.toISOString().slice(0, 19).replace('T', ' ');
+};
+
 module.exports = (pool) => {
     // GET all service sessions
     router.get('/', (req, res) => {
@@ -50,7 +61,7 @@ module.exports = (pool) => {
         const finalNote = note ?? '';
         const finalTableNumber = table_number ?? tableNumber ?? null;
         const finalStaffId = staff_id ?? staffId ?? null;
-        const finalEndedAt = ended_at ?? endedAt ?? null;
+        const finalEndedAt = toMysqlDateTime(ended_at ?? endedAt ?? null);
         const finalStatus = status ?? 'Active';
         const query = `
             INSERT INTO service_sessions
@@ -101,7 +112,7 @@ module.exports = (pool) => {
         const finalNote = note ?? '';
         const finalTableNumber = table_number ?? tableNumber ?? null;
         const finalStaffId = staff_id ?? staffId ?? null;
-        const finalEndedAt = ended_at ?? endedAt ?? null;
+        const finalEndedAt = toMysqlDateTime(ended_at ?? endedAt ?? null);
         const finalStatus = status ?? 'Active';
         const query = `
             UPDATE service_sessions

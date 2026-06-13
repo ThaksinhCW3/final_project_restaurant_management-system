@@ -263,6 +263,17 @@ const formatTime = (value: string): string => {
   return parsed.toTimeString().slice(0, 5);
 };
 
+const toMysqlDateTime = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value.includes("T") ? value.slice(0, 19).replace("T", " ") : value;
+  }
+
+  return parsed.toISOString().slice(0, 19).replace("T", " ");
+};
+
 const splitName = (name: string): { firstName: string; lastName: string } => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length <= 1) {
@@ -473,7 +484,7 @@ const createSessionPayload = (data: SessionCreateInput) => ({
   note: data.note ?? "",
   table_number: data.tableNumber == null || data.tableNumber === "" ? null : Number(data.tableNumber),
   staff_id: data.staffId == null || data.staffId === "" ? null : Number(data.staffId),
-  ended_at: data.endedAt ?? null,
+  ended_at: toMysqlDateTime(data.endedAt),
   status: data.status === "Completed" ? "Completed" : data.status === "PendingPayment" || data.status === "pending_payment" ? "PendingPayment" : "Active",
 });
 

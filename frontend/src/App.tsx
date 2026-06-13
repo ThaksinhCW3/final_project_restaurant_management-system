@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -75,6 +75,7 @@ export default function App() {
   const [modal, setModal] = useState<AppModalState>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [loaded, setLoaded] = useState<boolean>(false);
+  const paymentLocks = useRef(new Set<string>());
 
   const parseSessionId = (
     value: string | number | null | undefined,
@@ -712,51 +713,69 @@ export default function App() {
   };
 
   const confirmPayment = async (id: string) => {
+    if (paymentLocks.current.has(id)) return;
+
     const session = sessions.find((x) => x.id === id);
     if (!session) return;
+    const sessionNumericId = parseSessionId(session.id);
+    if (sessionNumericId === null) {
+      toast("Invalid bill id", "error");
+      return;
+    }
+
+    paymentLocks.current.add(id);
+
     const total = session.items.reduce(
       (sum, item) =>
         sum + (menu.find((m) => m.id === item.id)?.price ?? 0) * item.qty,
       0,
     );
     try {
-      await apiClient.sales.create({
+      const saleAlreadyExists = sales.some(
+        (sale) => sale.sessionId === sessionNumericId,
+      );
+      const saleRecord = {
+        id: uid(sales),
         table: session.id,
         items: session.items.length,
         total,
         time: now(),
         date: today(),
-        sessionId: parseSessionId(session.id),
-      });
-      const sessionNumericId = parseSessionId(session.id);
-      if (sessionNumericId !== null) {
-        await apiClient.sessions.update(sessionNumericId, {
-          sessionType: session.sessionType ?? "dine-in",
-          note: session.note,
-          tableNumber: null,
-          staffId: session.staffId ?? null,
-          status: "Completed",
-          endedAt: new Date().toISOString(),
-        });
-      }
-      setSales((p) => [
-        {
-          id: uid(p),
+        sessionId: sessionNumericId,
+      };
+
+      if (!saleAlreadyExists) {
+        await apiClient.sales.create({
           table: session.id,
           items: session.items.length,
           total,
-          time: now(),
-          date: today(),
+          time: saleRecord.time,
+          date: saleRecord.date,
           sessionId: sessionNumericId,
-        },
-        ...p,
-      ]);
+        });
+        setSales((p) =>
+          p.some((sale) => sale.sessionId === sessionNumericId)
+            ? p
+            : [saleRecord, ...p],
+        );
+      }
+
+      await apiClient.sessions.update(sessionNumericId, {
+        sessionType: session.sessionType ?? "dine-in",
+        note: session.note,
+        tableNumber: null,
+        staffId: session.staffId ?? null,
+        status: "Completed",
+        endedAt: new Date().toISOString(),
+      });
       setSessions((p) => p.filter((x) => x.id !== id));
       if (selSession === id) setSelSession(null);
       setModal(null);
+      paymentLocks.current.delete(id);
       toast(`ຊໍາລະ ${id} ສຳເລັດ`, "success");
     } catch (err) {
       console.error("Payment failed", err);
+      paymentLocks.current.delete(id);
       toast("ຜິດພາດ", "error");
     }
   };
