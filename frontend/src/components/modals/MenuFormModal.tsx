@@ -278,7 +278,7 @@ export default function MenuFormModal({
                 aspect={4 / 3}
                 onCropChange={setCrop}
                 onZoomChange={setZoom}
-                onCropComplete={(_, croppedPixels) => setCroppedAreaPixels(croppedPixels)}
+                onCropComplete={(_croppedArea: Area, croppedPixels: Area) => setCroppedAreaPixels(croppedPixels)}
               />
             </div>
             <div className="image-crop-controls">

@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { Btn } from "../components/SharedUI";
 import { C, CHART_DATA, PIE_DATA } from "../config/constants";
 import type { AppModalState } from "../types/app";
-import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem } from "../types";
+import type { MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem } from "../types";
 
 type DispatchModal = Dispatch<SetStateAction<AppModalState>>;
 

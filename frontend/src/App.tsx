@@ -20,7 +20,7 @@ import {
   today,
   now,
   uid,
-  tblTotal,
+  kip,
 } from "./config/constants";
 import { NavBtn } from "./components/SharedUI";
 import {
@@ -43,7 +43,6 @@ import {
 import POS from "./views/POS";
 import type {
   MenuItem,
-  TableItem,
   SaleItem,
   StaffItem,
   StockItem,
@@ -106,7 +105,6 @@ export default function App() {
         staffRes,
         stockRes,
         sessionsRes,
-        tablesRes,
         salesRes,
         categoriesRes,
         ingredientsRes,
@@ -225,41 +223,91 @@ export default function App() {
     );
   };
 
-  const addItem = (mid: number) => {
-    setTables((p) =>
-      p.map((t) => {
-        if (t.id !== selTable) return t;
-        const existing = t.items.find((i) => i.id === mid);
-        return existing
-          ? {
-              ...t,
-              items: t.items.map((i) =>
-                i.id === mid ? { ...i, qty: i.qty + 1 } : i,
-              ),
-            }
-          : { ...t, items: [...t.items, { id: mid, qty: 1 }] };
-      }),
-    );
+  const saveSessionItems = async (
+    sessionId: string,
+    items: SessionItem["items"],
+  ) => {
+    await apiClient.sessions.replaceItems(sessionId, items);
   };
 
-  const rmItem = (mid: number) => {
-    setTables((p) =>
-      p.map((t) => {
-        if (t.id !== selTable) return t;
-        const existing = t.items.find((i) => i.id === mid);
-        return existing && existing.qty > 1
-          ? {
-              ...t,
-              items: t.items.map((i) =>
-                i.id === mid ? { ...i, qty: i.qty - 1 } : i,
-              ),
-            }
-          : { ...t, items: t.items.filter((i) => i.id !== mid) };
-      }),
+  const addItem = async (sessionId: string, menuId: number) => {
+    const session = sessions.find((item) => item.id === sessionId);
+    if (!session || session.status === "pending_payment") return;
+
+    const existing = session.items.find((item) => item.id === menuId);
+    const items = existing
+      ? session.items.map((item) =>
+          item.id === menuId ? { ...item, qty: item.qty + 1 } : item,
+        )
+      : [...session.items, { id: menuId, qty: 1 }];
+
+    setSessions((prev) =>
+      prev.map((item) => (item.id === sessionId ? { ...item, items } : item)),
     );
+
+    try {
+      await saveSessionItems(sessionId, items);
+    } catch (err) {
+      console.error("Save session items failed", err);
+      setSessions((prev) =>
+        prev.map((item) =>
+          item.id === sessionId ? { ...item, items: session.items } : item,
+        ),
+      );
+      toast("Could not save bill items", "error");
+    }
   };
+
+  const rmItem = async (sessionId: string, menuId: number) => {
+    const session = sessions.find((item) => item.id === sessionId);
+    if (!session || session.status === "pending_payment") return;
+
+    const existing = session.items.find((item) => item.id === menuId);
+    if (!existing) return;
+
+    const items =
+      existing.qty > 1
+        ? session.items.map((item) =>
+            item.id === menuId ? { ...item, qty: item.qty - 1 } : item,
+          )
+        : session.items.filter((item) => item.id !== menuId);
+
+    setSessions((prev) =>
+      prev.map((item) => (item.id === sessionId ? { ...item, items } : item)),
+    );
+
+    try {
+      await saveSessionItems(sessionId, items);
+    } catch (err) {
+      console.error("Save session items failed", err);
+      setSessions((prev) =>
+        prev.map((item) =>
+          item.id === sessionId ? { ...item, items: session.items } : item,
+        ),
+      );
+      toast("Could not save bill items", "error");
+    }
+  };
+
+  const showQr = (session: SessionItem) =>
+    setModal({
+      type: "qr-display",
+      title: "QR Bill",
+      data: session,
+    });
+
+  const createBill = () =>
+    setModal({
+      type: "session-form",
+      title: "Generate QR Bill",
+      data: { sessionType: "dine-in", note: "", staffId: "" },
+    });
 
   const openTable = async (id: number) => {
+    void id;
+    createBill();
+    return;
+    /*
     try {
       const session = await apiClient.sessions.create({
         sessionType: "dine-in",
@@ -288,7 +336,13 @@ export default function App() {
     }
   };
 
+    */
+  };
+
   const checkout = async (id: number) => {
+    void id;
+    return;
+    /*
     const table = tables.find((x) => x.id === id);
     if (!table) return;
     const total = tblTotal(table, menu);
@@ -350,6 +404,12 @@ export default function App() {
       toast("ຜິດພາດ", "error");
     }
   };
+
+    */
+  };
+
+  void openTable;
+  void checkout;
 
   const toggleOk = async (id: number) => {
     const item = menu.find((m) => m.id === id);
@@ -614,7 +674,8 @@ export default function App() {
         status: "Active",
       });
       setSessions((p) => [created, ...p]);
-      setModal(null);
+      setSelSession(created.id);
+      setModal({ type: "qr-display", title: "QR Bill", data: created });
       toast(`ສ້າງ ${created.id} ສຳເລັດ`, "success");
     } catch (err) {
       console.error("Session creation failed", err);
@@ -622,7 +683,24 @@ export default function App() {
     }
   };
 
-  const requestPayment = (id: string) => {
+  const requestPayment = async (id: string) => {
+    const session = sessions.find((x) => x.id === id);
+    if (!session) return;
+
+    try {
+      await apiClient.sessions.update(id, {
+        sessionType: session.sessionType ?? "dine-in",
+        note: session.note,
+        tableNumber: null,
+        staffId: session.staffId ?? null,
+        status: "PendingPayment",
+      });
+    } catch (err) {
+      console.error("Request payment failed", err);
+      toast("Could not request payment", "error");
+      return;
+    }
+
     setSessions((p) =>
       p.map((x) =>
         x.id === id
@@ -648,6 +726,7 @@ export default function App() {
         total,
         time: now(),
         date: today(),
+        sessionId: parseSessionId(session.id),
       });
       const sessionNumericId = parseSessionId(session.id);
       if (sessionNumericId !== null) {
@@ -673,6 +752,7 @@ export default function App() {
         ...p,
       ]);
       setSessions((p) => p.filter((x) => x.id !== id));
+      if (selSession === id) setSelSession(null);
       setModal(null);
       toast(`ຊໍາລະ ${id} ສຳເລັດ`, "success");
     } catch (err) {
@@ -694,13 +774,15 @@ export default function App() {
           if (sessionNumericId !== null && session) {
             await apiClient.sessions.update(sessionNumericId, {
               sessionType: session.sessionType ?? "dine-in",
-              tableNumber: session.tableNumber ?? null,
+              note: session.note,
+              tableNumber: null,
               staffId: session.staffId ?? null,
               status: "Completed",
               endedAt: new Date().toISOString(),
             });
           }
           setSessions((p) => p.filter((s) => s.id !== id));
+          if (selSession === id) setSelSession(null);
           setModal(null);
           toast(`ຍົກເລີກ ${id}`, "info");
         } catch (err) {
@@ -711,9 +793,6 @@ export default function App() {
     });
 
   const revenueTotal = sales.reduce((sum, sale) => sum + sale.total, 0);
-  const occupiedTablesCount = tables.filter(
-    (t) => t.status === "occupied",
-  ).length;
   const activeBillsCount = sessions.length;
   const pendingBillsCount = sessions.filter(session => session.status === "pending_payment").length;
 
@@ -737,6 +816,109 @@ export default function App() {
     staff: "ພະນັກ",
   };
 
+  const billId =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("bill")
+      : null;
+  const customerSession = billId
+    ? sessions.find((session) => session.id === billId)
+    : null;
+
+  if (billId) {
+    const billTotal = customerSession
+      ? customerSession.items.reduce(
+          (sum, item) =>
+            sum + (menu.find((entry) => entry.id === item.id)?.price ?? 0) * item.qty,
+          0,
+        )
+      : 0;
+    const waitingPayment = customerSession?.status === "pending_payment";
+
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "var(--sans)", padding: 18 }}>
+        <div style={{ maxWidth: 980, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ background: C.sidebar, border: `1px solid ${C.border}`, borderRadius: 16, padding: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, color: C.textMid, textTransform: "uppercase", letterSpacing: 1.4 }}>Olay Khao Soi</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: C.text, fontFamily: "var(--heading)" }}>{billId}</div>
+              <div style={{ fontSize: 12, color: C.textDim, marginTop: 3 }}>{customerSession?.note || "Customer bill"}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 11, color: C.textDim }}>Total</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: C.gold }}>{kip(billTotal)}</div>
+            </div>
+          </div>
+
+          {!loaded ? (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, color: C.textDim }}>
+              Loading bill...
+            </div>
+          ) : !customerSession ? (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, color: C.textDim }}>
+              This QR bill is closed or no longer available.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 360px)", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 12 }}>
+                {menu.filter((item) => item.ok).map((item) => (
+                  <button
+                    key={item.id}
+                    disabled={waitingPayment}
+                    onClick={() => addItem(customerSession.id, item.id)}
+                    style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, textAlign: "left", cursor: waitingPayment ? "not-allowed" : "pointer", color: C.text, opacity: waitingPayment ? 0.55 : 1 }}
+                  >
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>{item.emoji}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>{item.name}</div>
+                    <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{item.en}</div>
+                    <div style={{ fontSize: 13, color: C.gold, fontWeight: 800, marginTop: 10 }}>{kip(item.price)}</div>
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ background: C.sidebar, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, height: "fit-content" }}>
+                <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12 }}>Your bill</div>
+                {customerSession.items.length === 0 ? (
+                  <div style={{ color: C.textDim, fontSize: 13, padding: "18px 0" }}>No items yet.</div>
+                ) : (
+                  customerSession.items.map((item) => {
+                    const menuItem = menu.find((entry) => entry.id === item.id);
+                    if (!menuItem) return null;
+
+                    return (
+                      <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 0", borderTop: `1px solid ${C.border}` }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700 }}>{menuItem.name}</div>
+                          <div style={{ fontSize: 11, color: C.textDim }}>{kip(menuItem.price)}</div>
+                        </div>
+                        <button disabled={waitingPayment} onClick={() => rmItem(customerSession.id, item.id)} style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${C.borderMid}`, background: C.card, color: C.red, cursor: waitingPayment ? "not-allowed" : "pointer" }}>-</button>
+                        <span style={{ width: 22, textAlign: "center", fontSize: 13, fontWeight: 800 }}>{item.qty}</span>
+                        <button disabled={waitingPayment} onClick={() => addItem(customerSession.id, item.id)} style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${C.borderMid}`, background: C.goldDim, color: C.gold, cursor: waitingPayment ? "not-allowed" : "pointer" }}>+</button>
+                      </div>
+                    );
+                  })
+                )}
+
+                {waitingPayment ? (
+                  <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: C.goldDim, color: C.gold, textAlign: "center", fontWeight: 800 }}>
+                    Waiting for staff confirmation
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => requestPayment(customerSession.id)}
+                    disabled={customerSession.items.length === 0}
+                    style={{ marginTop: 14, width: "100%", border: "none", borderRadius: 12, padding: "12px 14px", background: customerSession.items.length === 0 ? C.card2 : `linear-gradient(135deg,${C.gold},${C.amber})`, color: customerSession.items.length === 0 ? C.textDim : "#fff", cursor: customerSession.items.length === 0 ? "not-allowed" : "pointer", fontWeight: 800 }}
+                  >
+                    Request payment
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <div className="app-sidebar">
@@ -751,7 +933,7 @@ export default function App() {
             active={view === n.id}
             onClick={() => {
               setView(n.id);
-              setSelTable(null);
+              setSelSession(null);
               setShowAddItems(false);
             }}
           />
@@ -796,20 +978,23 @@ export default function App() {
 
         <div className={`app-content ${view === "pos" ? "app-content--pos" : ""}`}>
           {view === "dashboard" && (
-            <Dashboard sales={sales} tables={tables} menu={menu} />
+            <Dashboard sales={sales} sessions={sessions} menu={menu} />
           )}
           {view === "pos" && (
             <POS
-              tables={tables}
+              sessions={sessions}
               menu={menu}
-              selTable={selTable}
-              setSelTable={setSelTable}
+              selectedSessionId={selSession}
+              setSelectedSessionId={setSelSession}
               showAddItems={showAddItems}
               setShowAddItems={setShowAddItems}
+              createBill={createBill}
+              showQr={showQr}
               addItem={addItem}
               rmItem={rmItem}
-              openTable={openTable}
-              checkout={checkout}
+              requestPayment={requestPayment}
+              confirmPayment={confirmPayment}
+              cancelSession={cancelSession}
             />
           )}
           {view === "billing" && (
@@ -846,10 +1031,9 @@ export default function App() {
           {view === "reports" && (
             <ReportsView
               sales={sales}
-              tables={tables}
               revenueTotal={revenueTotal}
               activeBillsCount={activeBillsCount}
-              occupiedTablesCount={occupiedTablesCount}
+              pendingBillsCount={pendingBillsCount}
             />
           )}
           {view === "staff" && (
