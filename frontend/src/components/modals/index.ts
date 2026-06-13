@@ -1,3 +1,4 @@
+export { default as CategoryFormModal } from "./CategoryFormModal";
 export { default as ConfirmModal } from "./ConfirmModal";
 export { default as MenuFormModal } from "./MenuFormModal";
 export { default as QrDisplayModal } from "./QrDisplayModal";

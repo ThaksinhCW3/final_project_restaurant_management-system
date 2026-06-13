@@ -24,6 +24,7 @@ import {
 } from "./config/constants";
 import { NavBtn } from "./components/SharedUI";
 import {
+  CategoryFormModal,
   ConfirmModal,
   MenuFormModal,
   QrDisplayModal,
@@ -518,6 +519,54 @@ export default function App() {
       setModal(null);
     } catch (err) {
       console.error("Menu operation failed", err);
+      toast("ຜິດພາດ", "error");
+    }
+  };
+
+  const submitCategory = async () => {
+    if (!modal?.data) return;
+    const categoryName = String(
+      modal.data.name ?? modal.data.category_name ?? "",
+    ).trim();
+
+    if (!categoryName) {
+      toast("ໃສ່ຊື່ໝວດ", "error");
+      return;
+    }
+
+    const exists = categories.some((category) => {
+      const name = String(
+        category.category_name ?? category.categoryName ?? category.name ?? "",
+      ).trim();
+      return name.toLocaleLowerCase() === categoryName.toLocaleLowerCase();
+    });
+
+    if (exists) {
+      toast("ໝວດນີ້ມີແລ້ວ", "error");
+      return;
+    }
+
+    try {
+      const result = await apiClient.categories.create({
+        category_name: categoryName,
+      });
+      const saved = result.data ?? {};
+      const savedId = saved.category_id ?? saved.categoryId ?? Date.now();
+      const savedName =
+        saved.category_name ?? saved.categoryName ?? categoryName;
+      const category = {
+        id: savedId,
+        category_id: savedId,
+        name: savedName,
+        category_name: savedName,
+      };
+
+      setCategories((current) => [...current, category]);
+      setActiveCat(savedName);
+      toast(`ເພີ່ມໝວດ «${savedName}»`);
+      setModal(null);
+    } catch (err) {
+      console.error("Category operation failed", err);
       toast("ຜິດພາດ", "error");
     }
   };
@@ -1076,6 +1125,15 @@ export default function App() {
           setMenuRecipeField={setMenuRecipeField}
           removeMenuRecipeRow={removeMenuRecipeRow}
           submitMenu={submitMenu}
+        />
+      )}
+
+      {modal?.type === "category-form" && (
+        <CategoryFormModal
+          modal={modal}
+          onClose={() => setModal(null)}
+          setField={setField}
+          submitCategory={submitCategory}
         />
       )}
 

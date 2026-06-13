@@ -103,86 +103,128 @@ export function MenuView({
   toggleOk: (id: number) => void;
   deleteMenu: (id: number, name: string) => void;
 }) {
-  const menuCategories = ["ທັງໝົດ", ...categories.map((c) => c.category_name || c.categoryName || c.name)];
+  const categoryNames = Array.from(
+    new Set(
+      [
+        ...categories.map((c) => c.category_name || c.categoryName || c.name),
+        ...menu.map((item) => item.cat),
+      ].filter(Boolean),
+    ),
+  );
+  const menuCategories = ["ທັງໝົດ", ...categoryNames];
+  const selectedCategory = menuCategories.includes(activeCat)
+    ? activeCat
+    : "ທັງໝົດ";
+  const visibleMenu = menu.filter(
+    (item) => selectedCategory === "ທັງໝົດ" || item.cat === selectedCategory,
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
         <div style={{ fontSize: 14, color: C.textMid }}>ເມນູທັງໝົດ</div>
-        <Btn
-          onClick={() =>
-            setModal({
-              type: "menu-form",
-              title: "ເພີ່ມເມນູ",
-              data: {
-                name: "",
-                en: "",
-                price: "",
-                cat: categories[0]?.category_name || categories[0]?.categoryName || "",
-                emoji: "🍜",
-                image: "",
-                originalImage: "",
-                ok: true,
-                recipeItems: [],
-              },
-            })
-          }
-        >
-          <Plus size={14} /> ເພີ່ມເມນູ
-        </Btn>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <Btn
+            variant="secondary"
+            onClick={() =>
+              setModal({
+                type: "category-form",
+                title: "ເພີ່ມໝວດເມນູ",
+                data: { name: "" },
+              })
+            }
+          >
+            <Plus size={14} /> ເພີ່ມໝວດ
+          </Btn>
+          <Btn
+            onClick={() =>
+              setModal({
+                type: "menu-form",
+                title: "ເພີ່ມເມນູ",
+                data: {
+                  name: "",
+                  en: "",
+                  price: "",
+                  cat:
+                    selectedCategory === "ທັງໝົດ"
+                      ? categoryNames[0] || ""
+                      : selectedCategory,
+                  emoji: "🍜",
+                  image: "",
+                  originalImage: "",
+                  ok: true,
+                  recipeItems: [],
+                },
+              })
+            }
+          >
+            <Plus size={14} /> ເພີ່ມເມນູ
+          </Btn>
+        </div>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-        {menuCategories.map((c, idx) => (
-          <button
-            key={`${c}-${idx}`}
-            onClick={() => setActiveCat(c)}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 10, color: C.textMid, fontSize: 12 }}>
+          <span style={{ textTransform: "uppercase", letterSpacing: 1.1 }}>ໝວດ</span>
+          <select
+            value={selectedCategory}
+            onChange={(e) => setActiveCat(e.target.value)}
             style={{
-              padding: "10px 14px",
+              minWidth: 180,
+              background: C.card,
+              border: `1px solid ${C.border}`,
               borderRadius: 12,
-              border: `1px solid ${activeCat === c ? C.gold : C.border}`,
-              background: activeCat === c ? C.goldDim : C.card,
+              padding: "10px 36px 10px 14px",
               color: C.text,
+              cursor: "pointer",
+              outline: "none",
+              fontFamily: "var(--sans)",
+              fontSize: 13,
             }}
           >
-            {c}
-          </button>
-        ))}
+            {menuCategories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span style={{ color: C.textDim, fontSize: 12 }}>
+          {visibleMenu.length} ລາຍການ
+        </span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 }}>
-        {menu
-          .filter((item) => activeCat === "ທັງໝົດ" || item.cat === activeCat)
-          .map((item) => (
-            <div key={item.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, padding: 18, display: "flex", flexDirection: "column", gap: 9 }}>
-              <div style={{ height: 118, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: C.card2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {item.image ? (
-                  <img src={item.image} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, color: C.textDim }}>
-                    <ImageIcon size={22} />
-                    <span style={{ fontSize: 11 }}>No image</span>
-                  </div>
-                )}
+        {visibleMenu.map((item) => (
+          <div key={item.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, padding: 18, display: "flex", flexDirection: "column", gap: 9 }}>
+            <div style={{ height: 118, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: C.card2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {item.image ? (
+                <img src={item.image} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, color: C.textDim }}>
+                  <ImageIcon size={22} />
+                  <span style={{ fontSize: 11 }}>No image</span>
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text || "#000" }}>{item.name || "Missing Lao Name"}</div>
+                  <div style={{ fontSize: 11, color: C.textDim || "#666" }}>{item.en || "Missing English Name"}</div>
+                </div>
+                <div style={{ fontSize: 18 }}>{item.emoji}</div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: C.text || "#000" }}>{item.name || "Missing Lao Name"}</div>
-                    <div style={{ fontSize: 11, color: C.textDim || "#666" }}>{item.en || "Missing English Name"}</div>
-                  </div>
-                  <div style={{ fontSize: 18 }}>{item.emoji}</div>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: C.gold || "gold" }}>{item.price}</span>
-                  <span style={{ fontSize: 11, color: item.ok ? C.green || "green" : C.textDim || "#666", padding: "4px 8px", borderRadius: 999, background: item.ok ? "rgba(74,140,69,0.12)" : "rgba(90,90,90,0.08)" }}>{item.ok ? "ເປີດ" : "ປິດ"}</span>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className="menu-action-btn" onClick={() => toggleOk(item.id)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text }}>{item.ok ? "ປິດ" : "ເປີດ"}</button>
-                  <button className="menu-action-btn" onClick={() => setModal({ type: "menu-form", title: "ແກ້ໄຂເມນູ", data: { ...item, price: String(item.price), image: item.image ?? "", originalImage: item.image ?? "", recipeItems: recipes.filter((recipe) => recipe.menuId === item.id).map((recipe) => ({ id: recipe.id, ingredientId: recipe.ingredientId, quantityUsed: String(recipe.quantityUsed) })) } })} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><Pencil size={14} /> ແກ້ໄຂ</button>
-                  <button className="menu-action-btn menu-delete-btn" onClick={() => deleteMenu(item.id, item.name)} style={{ width: 38, background: "rgba(208,64,48,0.12)", border: "1px solid rgba(208,64,48,0.3)", borderRadius: 10, color: C.red || "red", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={14} /></button>
-                </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: C.gold || "gold" }}>{item.price}</span>
+                <span style={{ fontSize: 11, color: item.ok ? C.green || "green" : C.textDim || "#666", padding: "4px 8px", borderRadius: 999, background: item.ok ? "rgba(74,140,69,0.12)" : "rgba(90,90,90,0.08)" }}>{item.ok ? "ເປີດ" : "ປິດ"}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="menu-action-btn" onClick={() => toggleOk(item.id)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text }}>{item.ok ? "ປິດ" : "ເປີດ"}</button>
+                <button className="menu-action-btn" onClick={() => setModal({ type: "menu-form", title: "ແກ້ໄຂເມນູ", data: { ...item, price: String(item.price), image: item.image ?? "", originalImage: item.image ?? "", recipeItems: recipes.filter((recipe) => recipe.menuId === item.id).map((recipe) => ({ id: recipe.id, ingredientId: recipe.ingredientId, quantityUsed: String(recipe.quantityUsed) })) } })} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><Pencil size={14} /> ແກ້ໄຂ</button>
+                <button className="menu-action-btn menu-delete-btn" onClick={() => deleteMenu(item.id, item.name)} style={{ width: 38, background: "rgba(208,64,48,0.12)", border: "1px solid rgba(208,64,48,0.3)", borderRadius: 10, color: C.red || "red", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={14} /></button>
               </div>
             </div>
-          ))}
+          </div>
+        ))}
       </div>
     </div>
   );
