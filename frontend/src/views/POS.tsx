@@ -1,6 +1,6 @@
 // src/views/POS.tsx
-import { CreditCard, Minus, Plus, QrCode, X } from "lucide-react";
-import { C, kip } from "../config/constants";
+import { CreditCard, ExternalLink, Minus, Plus, QrCode, X } from "lucide-react";
+import { BILL_URL, C, kip } from "../config/constants";
 import type { MenuItem, SessionItem } from "../types";
 
 const sessionTotal = (session: SessionItem, menu: MenuItem[]): number =>
@@ -42,6 +42,9 @@ export default function POS({
 }: POSProps) {
   const selectedSession = selectedSessionId ? sessions.find(session => session.id === selectedSessionId) : null;
   const pendingPayments = sessions.filter(session => session.status === "pending_payment").length;
+  const openCustomerView = (sessionId: string) => {
+    window.open(BILL_URL(sessionId), "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
@@ -103,6 +106,7 @@ export default function POS({
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button onClick={() => showQr(selectedSession)} style={{ background: C.goldDim, border: `1px solid ${C.borderMid}`, color: C.gold, borderRadius: 8, cursor: "pointer", padding: "6px 9px", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}><QrCode size={13} /> QR</button>
+                  <button onClick={() => openCustomerView(selectedSession.id)} style={{ background: C.card, border: `1px solid ${C.border}`, color: C.textMid, borderRadius: 8, cursor: "pointer", padding: "6px 9px", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}><ExternalLink size={13} /> View</button>
                   <button onClick={() => { setSelectedSessionId(null); setShowAddItems(false); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: C.textDim, padding: 4 }}><X size={16} /></button>
                 </div>
               </div>

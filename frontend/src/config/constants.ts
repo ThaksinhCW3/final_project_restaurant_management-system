@@ -98,9 +98,13 @@ export const PAY_METHODS = [
   { id: "ບັດ", label: "ບັດ", emoji: "💳" },
 ];
 
-export const QR_URL = (id: string): string => {
+export const BILL_URL = (id: string): string => {
   const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
-  return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`${origin}/?bill=${id}`)}`;
+  return `${origin}/?bill=${encodeURIComponent(id)}`;
+};
+
+export const QR_URL = (id: string): string => {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(BILL_URL(id))}`;
 };
 
 export const CHART_DATA: ChartData[] = [

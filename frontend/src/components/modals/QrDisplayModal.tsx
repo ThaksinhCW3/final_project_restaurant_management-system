@@ -1,4 +1,5 @@
-import { C, QR_URL } from "../../config/constants";
+import { ExternalLink } from "lucide-react";
+import { BILL_URL, C, QR_URL } from "../../config/constants";
 import type { AppModalState } from "../../types/app";
 import { Btn, Modal } from "../SharedUI";
 
@@ -8,6 +9,10 @@ type Props = {
 };
 
 export default function QrDisplayModal({ modal, onClose }: Props) {
+  const openCustomerView = () => {
+    window.open(BILL_URL(modal.data.id), "_blank", "noopener,noreferrer");
+  };
+
   return (
     <Modal title={modal.title ?? "QR Bill"} onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
@@ -19,6 +24,7 @@ export default function QrDisplayModal({ modal, onClose }: Props) {
           <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>{modal.data.createdAt}</div>
         </div>
         <div style={{ display: "flex", gap: 10, width: "100%" }}>
+          <Btn onClick={openCustomerView}><ExternalLink size={14} /> Customer view</Btn>
           <Btn variant="secondary" onClick={onClose}>ປິດ</Btn>
           <Btn onClick={onClose}>ບັນທຶກ</Btn>
         </div>

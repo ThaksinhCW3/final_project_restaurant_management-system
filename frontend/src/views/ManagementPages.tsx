@@ -1,7 +1,7 @@
-import { Plus, Pencil, Trash2, Image as ImageIcon } from "lucide-react";
+import { ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import { Btn } from "../components/SharedUI";
-import { C, CHART_DATA, PIE_DATA } from "../config/constants";
+import { BILL_URL, C, CHART_DATA, PIE_DATA } from "../config/constants";
 import type { AppModalState } from "../types/app";
 import type { MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem } from "../types";
 
@@ -22,6 +22,10 @@ export function BillingView({
   confirmPayment: (id: string) => void;
   cancelSession: (id: string) => void;
 }) {
+  const openCustomerView = (sessionId: string) => {
+    window.open(BILL_URL(sessionId), "_blank", "noopener,noreferrer");
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
@@ -62,6 +66,7 @@ export function BillingView({
                 <span>{s.items.length} ລາຍການ</span>
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <Btn variant="secondary" onClick={() => openCustomerView(s.id)}><ExternalLink size={14} /> View</Btn>
                 {!pending && <Btn variant="secondary" onClick={() => requestPayment(s.id)}>ຂໍການຊໍາລະ</Btn>}
                 {pending && <Btn onClick={() => confirmPayment(s.id)}>ຊໍາລະ</Btn>}
                 <Btn variant="danger" onClick={() => cancelSession(s.id)}>ຍົກເລີກ</Btn>
