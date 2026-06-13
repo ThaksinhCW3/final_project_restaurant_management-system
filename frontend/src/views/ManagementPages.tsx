@@ -264,17 +264,16 @@ export function ReportsView({
   activeBillsCount: number;
   pendingBillsCount: number;
 }) {
-  const occupiedTablesCount = pendingBillsCount;
-  const tables = { length: activeBillsCount };
+  const reportCards = [
+    { label: "ລາຍຮັບລວມ", value: `${revenueTotal.toLocaleString("en")} ₭`, extra: "ຈາກບິນຈິງ", color: C.gold },
+    { label: "QR Bill", value: `${activeBillsCount}`, extra: "ບິນ QR ທີ່ເປີດຢູ່", color: C.green },
+    { label: "ລໍຖ້າຊໍາລະ", value: `${pendingBillsCount}`, extra: "ລໍພະນັກງານຢືນຢັນ", color: C.blue },
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        {[
-          { label: "ລາຍຮັບລວມ", value: `${revenueTotal.toLocaleString("en")} ₭`, extra: "ຈາກບິນຈິງ", color: C.gold },
-          { label: "ໃບບິນ", value: `${activeBillsCount}`, extra: "ບິນເປີດ", color: C.green },
-          { label: "ໂຕະທີ່ໃຊ້", value: `${occupiedTablesCount}/${tables.length}`, extra: "ໂຕະທີ່ກຳລັງໃຊ້", color: C.blue },
-        ].map((item) => (
+        {reportCards.map((item) => (
           <div key={item.label} style={{ flex: 1, minWidth: 140, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
             <div style={{ fontSize: 10, color: C.textMid, textTransform: "uppercase", letterSpacing: 1.4 }}>{item.label}</div>
             <div style={{ fontSize: 22, fontWeight: 700, color: C.text, marginTop: 7 }}>{item.value}</div>
@@ -313,7 +312,7 @@ export function ReportsView({
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, padding: 18 }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 16 }}>ປະຫວັດການຂາຍ</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 110px 90px 90px", gap: 12, fontSize: 11, color: C.textMid, textTransform: "uppercase", marginBottom: 10 }}>
-          <span>ໂຕະ</span><span>ລາຍການ</span><span>ຍອດ</span><span>ວັນທີ່</span><span>ເວລາ</span>
+          <span>Bill</span><span>ລາຍການ</span><span>ຍອດ</span><span>ວັນທີ່</span><span>ເວລາ</span>
         </div>
         {sales.map((s) => (
           <div key={s.id} style={{ display: "grid", gridTemplateColumns: "1fr 80px 110px 90px 90px", gap: 12, padding: "12px 0", borderTop: `1px solid ${C.border}` }}>
