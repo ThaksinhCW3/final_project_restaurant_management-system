@@ -854,78 +854,78 @@ export default function App() {
     const waitingPayment = customerSession?.status === "pending_payment";
 
     return (
-      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "var(--sans)", padding: 18 }}>
-        <div style={{ maxWidth: 980, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ background: C.sidebar, border: `1px solid ${C.border}`, borderRadius: 16, padding: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <div className="customer-page">
+        <div className="customer-shell">
+          <div className="customer-header">
             <div>
-              <div style={{ fontSize: 10, color: C.textMid, textTransform: "uppercase", letterSpacing: 1.4 }}>Olay Khao Soi</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: C.text, fontFamily: "var(--heading)" }}>{billId}</div>
-              <div style={{ fontSize: 12, color: C.textDim, marginTop: 3 }}>{customerSession?.note || "Customer bill"}</div>
+              <div className="customer-kicker">Olay Khao Soi</div>
+              <div className="customer-bill-id">{billId}</div>
+              <div className="customer-note">{customerSession?.note || "Customer bill"}</div>
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 11, color: C.textDim }}>Total</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: C.gold }}>{kip(billTotal)}</div>
+            <div className="customer-total">
+              <div className="customer-total-label">Total</div>
+              <div className="customer-total-value">{kip(billTotal)}</div>
             </div>
           </div>
 
           {!loaded ? (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, color: C.textDim }}>
+            <div className="customer-message">
               Loading bill...
             </div>
           ) : !customerSession ? (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, color: C.textDim }}>
+            <div className="customer-message">
               This QR bill is closed or no longer available.
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 360px)", gap: 16 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 12 }}>
+            <div className="customer-grid">
+              <div className="customer-menu-grid">
                 {menu.filter((item) => item.ok).map((item) => (
                   <button
                     key={item.id}
+                    className="customer-menu-card"
                     disabled={waitingPayment}
                     onClick={() => addItem(customerSession.id, item.id)}
-                    style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, textAlign: "left", cursor: waitingPayment ? "not-allowed" : "pointer", color: C.text, opacity: waitingPayment ? 0.55 : 1 }}
                   >
-                    <div style={{ fontSize: 24, marginBottom: 8 }}>{item.emoji}</div>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>{item.name}</div>
-                    <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{item.en}</div>
-                    <div style={{ fontSize: 13, color: C.gold, fontWeight: 800, marginTop: 10 }}>{kip(item.price)}</div>
+                    <div className="customer-menu-emoji">{item.emoji}</div>
+                    <div className="customer-menu-name">{item.name}</div>
+                    <div className="customer-menu-en">{item.en}</div>
+                    <div className="customer-menu-price">{kip(item.price)}</div>
                   </button>
                 ))}
               </div>
 
-              <div style={{ background: C.sidebar, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, height: "fit-content" }}>
-                <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12 }}>Your bill</div>
+              <div className="customer-bill-card">
+                <div className="customer-bill-title">Your bill</div>
                 {customerSession.items.length === 0 ? (
-                  <div style={{ color: C.textDim, fontSize: 13, padding: "18px 0" }}>No items yet.</div>
+                  <div className="customer-empty">No items yet.</div>
                 ) : (
                   customerSession.items.map((item) => {
                     const menuItem = menu.find((entry) => entry.id === item.id);
                     if (!menuItem) return null;
 
                     return (
-                      <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 0", borderTop: `1px solid ${C.border}` }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700 }}>{menuItem.name}</div>
-                          <div style={{ fontSize: 11, color: C.textDim }}>{kip(menuItem.price)}</div>
+                      <div key={item.id} className="customer-bill-row">
+                        <div className="customer-bill-item">
+                          <div className="customer-bill-name">{menuItem.name}</div>
+                          <div className="customer-bill-price">{kip(menuItem.price)}</div>
                         </div>
-                        <button disabled={waitingPayment} onClick={() => rmItem(customerSession.id, item.id)} style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${C.borderMid}`, background: C.card, color: C.red, cursor: waitingPayment ? "not-allowed" : "pointer" }}>-</button>
-                        <span style={{ width: 22, textAlign: "center", fontSize: 13, fontWeight: 800 }}>{item.qty}</span>
-                        <button disabled={waitingPayment} onClick={() => addItem(customerSession.id, item.id)} style={{ width: 28, height: 28, borderRadius: 999, border: `1px solid ${C.borderMid}`, background: C.goldDim, color: C.gold, cursor: waitingPayment ? "not-allowed" : "pointer" }}>+</button>
+                        <button className="customer-qty-btn customer-qty-btn--minus" disabled={waitingPayment} onClick={() => rmItem(customerSession.id, item.id)}>-</button>
+                        <span className="customer-qty">{item.qty}</span>
+                        <button className="customer-qty-btn customer-qty-btn--plus" disabled={waitingPayment} onClick={() => addItem(customerSession.id, item.id)}>+</button>
                       </div>
                     );
                   })
                 )}
 
                 {waitingPayment ? (
-                  <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: C.goldDim, color: C.gold, textAlign: "center", fontWeight: 800 }}>
+                  <div className="customer-waiting">
                     Waiting for staff confirmation
                   </div>
                 ) : (
                   <button
+                    className="customer-payment-btn"
                     onClick={() => requestPayment(customerSession.id)}
                     disabled={customerSession.items.length === 0}
-                    style={{ marginTop: 14, width: "100%", border: "none", borderRadius: 12, padding: "12px 14px", background: customerSession.items.length === 0 ? C.card2 : `linear-gradient(135deg,${C.gold},${C.amber})`, color: customerSession.items.length === 0 ? C.textDim : "#fff", cursor: customerSession.items.length === 0 ? "not-allowed" : "pointer", fontWeight: 800 }}
                   >
                     Request payment
                   </button>

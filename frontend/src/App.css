@@ -170,6 +170,329 @@
   color: #121212;
 }
 
+.customer-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  background: #ffffff;
+  color: #121212;
+  font-family: var(--sans);
+  padding: 18px;
+}
+
+.customer-shell {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.customer-header,
+.customer-message,
+.customer-bill-card,
+.customer-menu-card {
+  border: 1px solid rgba(181, 28, 28, 0.1);
+  border-radius: 14px;
+}
+
+.customer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f8f4f4;
+  padding: 18px;
+}
+
+.customer-kicker {
+  color: #7e1a1a;
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+.customer-bill-id {
+  color: #121212;
+  font-family: var(--heading);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.15;
+  margin-top: 2px;
+}
+
+.customer-note,
+.customer-total-label,
+.customer-menu-en,
+.customer-bill-price,
+.customer-empty {
+  color: #5a5a5a;
+}
+
+.customer-note {
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.customer-total {
+  text-align: right;
+}
+
+.customer-total-label {
+  font-size: 11px;
+}
+
+.customer-total-value {
+  color: #d32f2f;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.customer-message {
+  background: #ffffff;
+  color: #5a5a5a;
+  padding: 24px;
+}
+
+.customer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 16px;
+  align-items: start;
+}
+
+.customer-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.customer-menu-card {
+  width: 100%;
+  min-height: 142px;
+  box-sizing: border-box;
+  background: #ffffff;
+  color: #121212;
+  cursor: pointer;
+  padding: 14px;
+  text-align: left;
+  font-family: var(--sans);
+}
+
+.customer-menu-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.customer-menu-emoji {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.customer-menu-name {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.customer-menu-en {
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.customer-menu-price {
+  color: #d32f2f;
+  font-size: 13px;
+  font-weight: 800;
+  margin-top: 10px;
+}
+
+.customer-bill-card {
+  position: sticky;
+  top: 16px;
+  height: fit-content;
+  background: #f8f4f4;
+  padding: 16px;
+}
+
+.customer-bill-title {
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.customer-empty {
+  font-size: 13px;
+  padding: 18px 0;
+}
+
+.customer-bill-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px 28px 32px;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(181, 28, 28, 0.1);
+}
+
+.customer-bill-item {
+  min-width: 0;
+}
+
+.customer-bill-name {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.customer-bill-price {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.customer-qty-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.customer-qty-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.customer-qty-btn--minus {
+  border: 1px solid rgba(181, 28, 28, 0.25);
+  background: #ffffff;
+  color: #b71c1c;
+}
+
+.customer-qty-btn--plus {
+  border: 1px solid rgba(181, 28, 28, 0.25);
+  background: rgba(211, 47, 47, 0.14);
+  color: #d32f2f;
+}
+
+.customer-qty {
+  color: #121212;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.customer-waiting {
+  margin-top: 14px;
+  border-radius: 12px;
+  background: rgba(211, 47, 47, 0.14);
+  color: #d32f2f;
+  padding: 12px;
+  text-align: center;
+  font-weight: 800;
+}
+
+.customer-payment-btn {
+  width: 100%;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #d32f2f, #b71c1c);
+  color: #ffffff;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-weight: 800;
+  padding: 12px 14px;
+}
+
+.customer-payment-btn:disabled {
+  background: #f4f0f0;
+  color: #5a5a5a;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .customer-page {
+    padding: 10px;
+    padding-bottom: 18px;
+  }
+
+  .customer-shell {
+    gap: 10px;
+  }
+
+  .customer-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .customer-bill-id {
+    font-size: 20px;
+  }
+
+  .customer-total-value {
+    font-size: 18px;
+  }
+
+  .customer-grid {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 10px;
+  }
+
+  .customer-menu-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .customer-menu-card {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .customer-menu-emoji {
+    margin: 0;
+    font-size: 24px;
+  }
+
+  .customer-menu-name,
+  .customer-menu-en {
+    grid-column: 2;
+  }
+
+  .customer-menu-price {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    justify-self: end;
+    margin: 0;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .customer-bill-card {
+    position: static;
+    padding: 12px;
+  }
+
+  .customer-bill-title {
+    margin-bottom: 8px;
+  }
+
+  .customer-payment-btn,
+  .customer-waiting {
+    padding: 13px 14px;
+  }
+}
+
 .image-upload-zone {
   position: relative;
   display: flex;
