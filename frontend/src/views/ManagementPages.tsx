@@ -81,6 +81,7 @@ export function BillingView({
 
 export function MenuView({
   menu,
+  recipes,
   categories,
   activeCat,
   setActiveCat,
@@ -89,6 +90,7 @@ export function MenuView({
   deleteMenu,
 }: {
   menu: MenuItem[];
+  recipes: RecipeItem[];
   categories: any[];
   activeCat: string;
   setActiveCat: (value: string) => void;
@@ -114,7 +116,9 @@ export function MenuView({
                 cat: categories[0]?.category_name || categories[0]?.categoryName || "",
                 emoji: "🍜",
                 image: "",
+                originalImage: "",
                 ok: true,
+                recipeItems: [],
               },
             })
           }
@@ -168,7 +172,7 @@ export function MenuView({
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button className="menu-action-btn" onClick={() => toggleOk(item.id)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text }}>{item.ok ? "ປິດ" : "ເປີດ"}</button>
-                  <button className="menu-action-btn" onClick={() => setModal({ type: "menu-form", title: "ແກ້ໄຂເມນູ", data: { ...item, price: String(item.price), image: item.image ?? "" } })} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><Pencil size={14} /> ແກ້ໄຂ</button>
+                  <button className="menu-action-btn" onClick={() => setModal({ type: "menu-form", title: "ແກ້ໄຂເມນູ", data: { ...item, price: String(item.price), image: item.image ?? "", originalImage: item.image ?? "", recipeItems: recipes.filter((recipe) => recipe.menuId === item.id).map((recipe) => ({ id: recipe.id, ingredientId: recipe.ingredientId, quantityUsed: String(recipe.quantityUsed) })) } })} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><Pencil size={14} /> ແກ້ໄຂ</button>
                   <button className="menu-action-btn menu-delete-btn" onClick={() => deleteMenu(item.id, item.name)} style={{ width: 38, background: "rgba(208,64,48,0.12)", border: "1px solid rgba(208,64,48,0.3)", borderRadius: 10, color: C.red || "red", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={14} /></button>
                 </div>
               </div>
@@ -239,81 +243,6 @@ export function StockView({
             </div>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-export function RecipeView({
-  recipes,
-  menu,
-  ingredients,
-  setModal,
-  deleteRecipe,
-}: {
-  recipes: RecipeItem[];
-  menu: MenuItem[];
-  ingredients: IngredientItem[];
-  setModal: DispatchModal;
-  deleteRecipe: (id: number, label: string) => void;
-}) {
-  const openCreate = () =>
-    setModal({
-      type: "recipe-form",
-      title: "ເພີ່ມ Recipe",
-      data: {
-        menuId: menu[0]?.id ?? "",
-        ingredientId: ingredients[0]?.id ?? "",
-        quantityUsed: "",
-      },
-    });
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
-        <div style={{ fontSize: 14, color: C.textMid }}>Recipe ຂອງເມນູ</div>
-        <Btn onClick={openCreate} disabled={menu.length === 0 || ingredients.length === 0}>
-          <Plus size={14} /> ເພີ່ມ Recipe
-        </Btn>
-      </div>
-
-      {(menu.length === 0 || ingredients.length === 0) && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, padding: 18, color: C.textDim, fontSize: 13 }}>
-          ຕ້ອງມີເມນູ ແລະ ວັດຖຸດິບກ່ອນຈຶ່ງສ້າງ Recipe ໄດ້
-        </div>
-      )}
-
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.2fr 100px 120px", padding: "14px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase" }}>
-          <span>ເມນູ</span>
-          <span>ວັດຖຸດິບ</span>
-          <span>ຈຳນວນ</span>
-          <span>ຈັດການ</span>
-        </div>
-        {recipes.map((recipe) => {
-          const ingredient = ingredients.find((item) => item.id === recipe.ingredientId);
-          const label = `${recipe.menuName} - ${recipe.ingredientName}`;
-          return (
-            <div key={recipe.id} style={{ display: "grid", gridTemplateColumns: "1.2fr 1.2fr 100px 120px", padding: "14px 16px", borderTop: `1px solid ${C.border}`, alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 13, color: C.text }}>{recipe.menuName}</span>
-              <span style={{ fontSize: 13, color: C.text }}>{recipe.ingredientName}</span>
-              <span style={{ fontSize: 13, color: C.textDim }}>{recipe.quantityUsed} {recipe.unit ?? ingredient?.unit ?? ""}</span>
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => setModal({ type: "recipe-form", title: "ແກ້ໄຂ Recipe", data: { ...recipe, quantityUsed: String(recipe.quantityUsed) } })} style={{ width: 38, height: 36, borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Pencil size={14} />
-                </button>
-                <button onClick={() => deleteRecipe(recipe.id, label)} style={{ width: 38, height: 36, borderRadius: 10, border: `1px solid rgba(208,64,48,0.3)`, background: "rgba(208,64,48,0.08)", cursor: "pointer", color: C.red, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-        {recipes.length === 0 && (
-          <div style={{ padding: 18, borderTop: `1px solid ${C.border}`, color: C.textDim, fontSize: 13 }}>
-            ຍັງບໍ່ມີ Recipe ທີ່ຜູກເມນູກັບວັດຖຸດິບ
-          </div>
-        )}
       </div>
     </div>
   );

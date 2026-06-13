@@ -14,22 +14,28 @@ import {
   QrCode,
   CheckCircle,
   AlertTriangle,
-  ClipboardList,
 } from "lucide-react";
 import {
   C,
   today,
   now,
   uid,
-  QR_URL,
   tblTotal,
 } from "./config/constants";
-import { NavBtn, Modal, Inp, Sel, Btn } from "./components/SharedUI";
+import { NavBtn } from "./components/SharedUI";
+import {
+  ConfirmModal,
+  MenuFormModal,
+  QrDisplayModal,
+  SessionFormModal,
+  StaffFormModal,
+  StockFormModal,
+  StockReceiveModal,
+} from "./components/modals";
 import Dashboard from "./views/Dashboard";
 import {
   BillingView,
   MenuView,
-  RecipeView,
   ReportsView,
   StaffView,
   StockView,
@@ -48,6 +54,7 @@ import type {
 import type { AppModalState } from "./types/app";
 import { apiClient } from "./api/client";
 import "./index.css";
+import "./App.css";
 
 type Toast = { id: number; msg: string; type: "success" | "error" | "info" };
 
@@ -149,6 +156,41 @@ export default function App() {
     setModal((prev) =>
       prev ? { ...prev, data: { ...prev.data, [field]: value } } : prev,
     );
+
+  const addMenuRecipeRow = (ingredientId?: number | string) =>
+    setModal((prev) =>
+      prev
+        ? {
+            ...prev,
+            data: {
+              ...prev.data,
+              recipeItems: [
+                ...(prev.data.recipeItems ?? []),
+                {
+                  ingredientId: ingredientId ?? ingredients[0]?.id ?? "",
+                  quantityUsed: "",
+                },
+              ],
+            },
+          }
+        : prev,
+    );
+
+  const setMenuRecipeField = (index: number, field: string, value: any) =>
+    setModal((prev) => {
+      if (!prev) return prev;
+      const recipeItems = [...(prev.data.recipeItems ?? [])];
+      recipeItems[index] = { ...recipeItems[index], [field]: value };
+      return { ...prev, data: { ...prev.data, recipeItems } };
+    });
+
+  const removeMenuRecipeRow = (index: number) =>
+    setModal((prev) => {
+      if (!prev) return prev;
+      const recipeItems = [...(prev.data.recipeItems ?? [])];
+      recipeItems.splice(index, 1);
+      return { ...prev, data: { ...prev.data, recipeItems } };
+    });
 
   const handleImageUpload = async (file: File | null, field = "image") => {
     if (!file) return;
@@ -326,6 +368,52 @@ export default function App() {
     }
   };
 
+  const syncMenuRecipes = async (menuId: number, recipeItems: any[] = []) => {
+    const validItems = recipeItems.filter(
+      (item) => item.ingredientId && item.quantityUsed !== "",
+    );
+    const existingItems = recipes.filter((recipe) => recipe.menuId === menuId);
+    const savedItems: RecipeItem[] = [];
+
+    for (const item of validItems) {
+      const ingredientId = Number(item.ingredientId);
+      const quantityUsed = Number(item.quantityUsed);
+      const ingredient = ingredients.find((entry) => entry.id === ingredientId);
+      const menuItem = menu.find((entry) => entry.id === menuId);
+      const recipeData = {
+        menuId,
+        ingredientId,
+        quantityUsed,
+      };
+      const normalized = {
+        ...recipeData,
+        menuName: String(modal?.data?.name ?? menuItem?.name ?? "Menu item"),
+        ingredientName: ingredient?.name ?? "Ingredient",
+        unit: ingredient?.unit ?? null,
+      };
+
+      if (item.id) {
+        await apiClient.recipes.update(item.id, recipeData);
+        savedItems.push({ id: item.id, ...normalized });
+      } else {
+        const result = await apiClient.recipes.create(recipeData);
+        savedItems.push({ id: result.data.recipe_id, ...normalized });
+      }
+    }
+
+    const validIds = new Set(validItems.map((item) => item.id).filter(Boolean));
+    for (const recipe of existingItems) {
+      if (!validIds.has(recipe.id)) {
+        await apiClient.recipes.delete(recipe.id);
+      }
+    }
+
+    setRecipes((current) => [
+      ...current.filter((recipe) => recipe.menuId !== menuId),
+      ...savedItems,
+    ]);
+  };
+
   const submitMenu = async () => {
     if (!modal?.data) return;
     const data = modal.data;
@@ -351,17 +439,21 @@ export default function App() {
         category?.category_id ?? category?.id ?? category?.categoryId ?? null,
     };
     try {
+      let savedMenuId = Number(data.id || 0);
       if (data.id) {
         await apiClient.menus.update(data.id, cleaned);
+        savedMenuId = Number(data.id);
         setMenu((p) =>
           p.map((m) => (m.id === data.id ? { ...m, ...cleaned } : m)),
         );
         toast(`ອັບເດດ «${data.name}»`);
       } else {
         const result = await apiClient.menus.create(cleaned);
-        setMenu((p) => [...p, { ...cleaned, id: result.data.menu_id }]);
+        savedMenuId = Number(result.data.menu_id ?? result.data.menuId);
+        setMenu((p) => [...p, { ...cleaned, id: savedMenuId }]);
         toast(`ເພີ່ມ «${data.name}»`);
       }
+      await syncMenuRecipes(savedMenuId, data.recipeItems ?? []);
       setModal(null);
     } catch (err) {
       console.error("Menu operation failed", err);
@@ -488,77 +580,6 @@ export default function App() {
           setModal(null);
         } catch (err) {
           console.error("Delete failed", err);
-          toast("ຜິດພາດ", "error");
-        }
-      },
-    });
-
-  const submitRecipe = async () => {
-    if (!modal?.data) return;
-    const data = modal.data;
-    if (!data.menuId || !data.ingredientId || !data.quantityUsed) {
-      toast("ໃສ່ເມນູ, ວັດຖຸດິບ ແລະ ຈຳນວນ", "error");
-      return;
-    }
-
-    const payload = {
-      menuId: Number(data.menuId),
-      ingredientId: Number(data.ingredientId),
-      quantityUsed: Number(data.quantityUsed),
-    };
-    const selectedMenu = menu.find((item) => item.id === payload.menuId);
-    const selectedIngredient = ingredients.find(
-      (item) => item.id === payload.ingredientId,
-    );
-    const recipeItem = {
-      ...payload,
-      menuName: selectedMenu?.name ?? data.menuName ?? "Menu item",
-      ingredientName:
-        selectedIngredient?.name ?? data.ingredientName ?? "Ingredient",
-      unit: selectedIngredient?.unit ?? data.unit ?? null,
-    };
-
-    try {
-      if (data.id) {
-        await apiClient.recipes.update(data.id, payload);
-        setRecipes((p) =>
-          p.map((recipe) =>
-            recipe.id === data.id ? { ...recipe, ...recipeItem } : recipe,
-          ),
-        );
-        toast("ອັບເດດ Recipe ສຳເລັດ");
-      } else {
-        const result = await apiClient.recipes.create(payload);
-        setRecipes((p) => [
-          ...p,
-          {
-            id: result.data.recipe_id,
-            ...recipeItem,
-          },
-        ]);
-        toast("ເພີ່ມ Recipe ສຳເລັດ");
-      }
-      setModal(null);
-    } catch (err) {
-      console.error("Recipe operation failed", err);
-      toast("ຜິດພາດ", "error");
-    }
-  };
-
-  const deleteRecipe = (id: number, label: string) =>
-    setModal({
-      type: "confirm",
-      title: "ລົບ Recipe",
-      msg: `ລົບ «${label}» ບໍ?`,
-      data: { id },
-      onConfirm: async () => {
-        try {
-          await apiClient.recipes.delete(id);
-          setRecipes((p) => p.filter((recipe) => recipe.id !== id));
-          toast("ລົບ Recipe ສຳເລັດ", "info");
-          setModal(null);
-        } catch (err) {
-          console.error("Delete recipe failed", err);
           toast("ຜິດພາດ", "error");
         }
       },
@@ -700,7 +721,6 @@ export default function App() {
     { id: "dashboard", icon: LayoutDashboard, label: "ຫຼັກ" },
     { id: "pos", icon: ShoppingCart, label: "POS" },
     { id: "menu", icon: Utensils, label: "ເມນູ" },
-    { id: "recipes", icon: ClipboardList, label: "Recipe" },
     { id: "stock", icon: Package, label: "ຄັງ" },
     { id: "billing", icon: QrCode, label: "Bill" },
     { id: "reports", icon: BarChart2, label: "ລາຍງານ" },
@@ -711,7 +731,6 @@ export default function App() {
     dashboard: "ພາບລວມ",
     pos: "ຈັດການໂຕະ",
     menu: "ເມນູ",
-    recipes: "Recipe",
     stock: "ຄັງ",
     billing: "ບິນ",
     reports: "ລາຍງານ",
@@ -719,44 +738,9 @@ export default function App() {
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        width: "100%",
-        background: C.bg,
-        fontFamily: "var(--sans)",
-        color: C.text,
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          width: 66,
-          background: C.sidebar,
-          borderRight: `1px solid ${C.border}`,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          padding: "14px 7px",
-          gap: 3,
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            width: 42,
-            height: 42,
-            borderRadius: 12,
-            background: C.goldDim,
-            border: `1px solid ${C.borderMid}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: 14,
-            flexShrink: 0,
-          }}
-        >
+    <div className="app-shell">
+      <div className="app-sidebar">
+        <div className="app-logo">
           <ChefHat size={20} color={C.gold} />
         </div>
         {navItems.map((n) => (
@@ -772,16 +756,8 @@ export default function App() {
             }}
           />
         ))}
-        <div style={{ flex: 1 }} />
-        <div
-          style={{
-            fontSize: 9,
-            color: loaded ? C.green : C.amber,
-            textAlign: "center",
-            paddingBottom: 6,
-            letterSpacing: 0.5,
-          }}
-        >
+        <div className="app-sidebar-spacer" />
+        <div className={`app-sync ${loaded ? "app-sync--saved" : "app-sync--loading"}`}>
           {loaded ? "● saved" : "● ..."}
         </div>
         <NavBtn
@@ -793,104 +769,32 @@ export default function App() {
         <NavBtn icon={LogOut} label="ອອກ" active={false} onClick={() => {}} />
       </div>
 
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            padding: "12px 26px",
-            borderBottom: `1px solid ${C.border}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            background: C.sidebar,
-            flexShrink: 0,
-          }}
-        >
+      <div className="app-main">
+        <div className="app-header">
           <div>
-            <div
-              style={{
-                fontSize: 9,
-                color: C.textMid,
-                letterSpacing: 1.8,
-                textTransform: "uppercase",
-              }}
-            >
+            <div className="app-kicker">
               ໂອເລ້ເຂົ້າຊອຍ ຫຼວງພະບາງ
             </div>
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 700,
-                color: C.text,
-                fontFamily: "var(--heading)",
-                marginTop: 1,
-              }}
-            >
+            <div className="app-title">
               {titles[view]}
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                background: C.card,
-                border: `1px solid ${C.border}`,
-                borderRadius: 9,
-                padding: "7px 13px",
-              }}
-            >
+          <div className="app-header-actions">
+            <div className="app-search">
               <Search size={13} color={C.textDim} />
-              <span style={{ fontSize: 12, color: C.textDim }}>ຄົ້ນຫາ...</span>
+              <span className="app-search-text">ຄົ້ນຫາ...</span>
             </div>
-            <div style={{ position: "relative", cursor: "pointer" }}>
+            <div className="app-notification">
               <Bell size={17} color={C.textMid} />
-              <div
-                style={{
-                  position: "absolute",
-                  top: -3,
-                  right: -3,
-                  width: 7,
-                  height: 7,
-                  borderRadius: "50%",
-                  background: C.red,
-                }}
-              />
+              <div className="app-notification-dot" />
             </div>
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: "50%",
-                background: `linear-gradient(135deg,${C.amber},${C.gold})`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 13,
-                fontWeight: 700,
-                color: "#fff",
-                cursor: "pointer",
-              }}
-            >
+            <div className="app-avatar">
               ໂ
             </div>
           </div>
         </div>
 
-        <div
-          style={{
-            flex: 1,
-            overflow: "auto",
-            padding: view === "pos" ? 0 : "22px 26px",
-          }}
-        >
+        <div className={`app-content ${view === "pos" ? "app-content--pos" : ""}`}>
           {view === "dashboard" && (
             <Dashboard sales={sales} tables={tables} menu={menu} />
           )}
@@ -921,21 +825,13 @@ export default function App() {
           {view === "menu" && (
             <MenuView
               menu={menu}
+              recipes={recipes}
               categories={categories}
               activeCat={activeCat}
               setActiveCat={setActiveCat}
               setModal={setModal}
               toggleOk={toggleOk}
               deleteMenu={deleteMenu}
-            />
-          )}
-          {view === "recipes" && (
-            <RecipeView
-              recipes={recipes}
-              menu={menu}
-              ingredients={ingredients}
-              setModal={setModal}
-              deleteRecipe={deleteRecipe}
             />
           )}
           {view === "stock" && (
@@ -967,467 +863,76 @@ export default function App() {
       </div>
 
       {modal?.type === "menu-form" && (
-        <Modal title={modal.title ?? "ເມນູ"} onClose={() => setModal(null)}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "0 16px",
-            }}
-          >
-            <Inp
-              label="ຊື່"
-              value={modal.data.name}
-              onChange={(e) => setField("name", e.target.value)}
-            />
-            <Inp
-              label="ຊື່ອັງກິດ"
-              value={modal.data.en}
-              onChange={(e) => setField("en", e.target.value)}
-            />
-            <Inp
-              label="ລາຄາ (₭)"
-              value={modal.data.price}
-              onChange={(e) => setField("price", e.target.value)}
-            />
-            <Inp
-              label="Emoji"
-              value={modal.data.emoji}
-              onChange={(e) => setField("emoji", e.target.value)}
-            />
-            <div style={{ marginBottom: 14 }}>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: C.textMid,
-                  textTransform: "uppercase",
-                  letterSpacing: 1.2,
-                  marginBottom: 6,
-                }}
-              >
-                Image
-              </div>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) =>
-                  void handleImageUpload(e.currentTarget.files?.[0] ?? null)
-                }
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  background: C.card2,
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 9,
-                  padding: "9px 12px",
-                  color: C.text,
-                  fontSize: 13,
-                  outline: "none",
-                  fontFamily: "var(--sans)",
-                }}
-              />
-              {modal.data.image ? (
-                <div
-                  style={{
-                    marginTop: 10,
-                    height: 120,
-                    borderRadius: 12,
-                    overflow: "hidden",
-                    border: `1px solid ${C.border}`,
-                    background: C.card2,
-                  }}
-                >
-                  <img
-                    src={modal.data.image}
-                    alt="Menu preview"
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      display: "block",
-                    }}
-                  />
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <Sel
-            label="ໝວດ"
-            value={modal.data.cat}
-            onChange={(e) => setField("cat", e.target.value)}
-          >
-            {categories.map((c) => (
-              <option
-                key={`${c.category_id || c.categoryId}-${c.category_name || c.categoryName || c.name}`}
-                value={c.category_name || c.categoryName || c.name}
-              >
-                {c.category_name || c.categoryName || c.name}
-              </option>
-            ))}
-          </Sel>
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setModal(null)}>
-              ຍົກເລີກ
-            </Btn>
-            <Btn onClick={submitMenu}>ບັນທຶກ</Btn>
-          </div>
-        </Modal>
+        <MenuFormModal
+          modal={modal}
+          categories={categories}
+          ingredients={ingredients}
+          onClose={() => setModal(null)}
+          setField={setField}
+          addMenuRecipeRow={addMenuRecipeRow}
+          setMenuRecipeField={setMenuRecipeField}
+          removeMenuRecipeRow={removeMenuRecipeRow}
+          submitMenu={submitMenu}
+        />
       )}
 
       {modal?.type === "staff-form" && (
-        <Modal title={modal.title ?? "ພະນັກງານ"} onClose={() => setModal(null)}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "0 16px",
-            }}
-          >
-            <Inp
-              label="ຊື່"
-              value={modal.data.name}
-              onChange={(e) => setField("name", e.target.value)}
-            />
-            <Inp
-              label="Emoji"
-              value={modal.data.emoji}
-              onChange={(e) => setField("emoji", e.target.value)}
-            />
-            <Sel
-              label="ຕໍາແໜ່ງ"
-              value={modal.data.role}
-              onChange={(e) => setField("role", e.target.value)}
-            >
-              <option value="ພະນັກງານ">ພະນັກງານ</option>
-              <option value="ເຈົ້າຂອງ">ເຈົ້າຂອງ</option>
-              <option value="ຫຸ້ນໄຟ">ຫຸ້ນໄຟ</option>
-            </Sel>
-            <Inp
-              label="ເວລາເລີ່ມ"
-              value={modal.data.since}
-              onChange={(e) => setField("since", e.target.value)}
-            />
-          </div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setModal(null)}>
-              ຍົກເລີກ
-            </Btn>
-            <Btn onClick={submitStaff}>ບັນທຶກ</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {modal?.type === "recipe-form" && (
-        <Modal title={modal.title ?? "Recipe"} onClose={() => setModal(null)}>
-          <Sel
-            label="ເມນູ"
-            value={modal.data.menuId}
-            onChange={(e) => setField("menuId", e.target.value)}
-          >
-            {menu.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </Sel>
-          <Sel
-            label="ວັດຖຸດິບ"
-            value={modal.data.ingredientId}
-            onChange={(e) => setField("ingredientId", e.target.value)}
-          >
-            {ingredients.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name} ({item.unit})
-              </option>
-            ))}
-          </Sel>
-          <Inp
-            label="ຈຳນວນທີ່ໃຊ້"
-            type="number"
-            min="0"
-            step="0.01"
-            value={modal.data.quantityUsed}
-            onChange={(e) => setField("quantityUsed", e.target.value)}
-          />
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setModal(null)}>
-              ຍົກເລີກ
-            </Btn>
-            <Btn onClick={submitRecipe}>ບັນທຶກ</Btn>
-          </div>
-        </Modal>
+        <StaffFormModal
+          modal={modal}
+          onClose={() => setModal(null)}
+          setField={setField}
+          submitStaff={submitStaff}
+        />
       )}
 
       {modal?.type === "session-form" && (
-        <Modal title={modal.title ?? "Bill"} onClose={() => setModal(null)}>
-          <Sel
-            label="ປະເພດເຊດຊັນ"
-            value={modal.data.sessionType}
-            onChange={(e) => setField("sessionType", e.target.value)}
-          >
-            <option value="dine-in">ທານທີ່ຮ້ານ</option>
-            <option value="takeaway">ກັບບ້ານ</option>
-          </Sel>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "0 12px",
-            }}
-          >
-            <Inp
-              label="ເລກໂຕະ"
-              type="number"
-              value={modal.data.tableNumber}
-              onChange={(e) => setField("tableNumber", e.target.value)}
-            />
-            <Inp
-              label="Staff ID"
-              type="number"
-              value={modal.data.staffId}
-              onChange={(e) => setField("staffId", e.target.value)}
-            />
-          </div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setModal(null)}>
-              ຍົກເລີກ
-            </Btn>
-            <Btn onClick={submitSession}>ບັນທຶກ</Btn>
-          </div>
-        </Modal>
+        <SessionFormModal
+          modal={modal}
+          onClose={() => setModal(null)}
+          setField={setField}
+          submitSession={submitSession}
+        />
       )}
 
       {modal?.type === "stock-form" && (
-        <Modal title={modal.title ?? "ສິນຄ້າ"} onClose={() => setModal(null)}>
-          <Inp
-            label="ຊື່"
-            value={modal.data.name}
-            onChange={(e) => setField("name", e.target.value)}
-          />
-          <div style={{ marginBottom: 14 }}>
-            <div
-              style={{
-                fontSize: 10,
-                color: C.textMid,
-                textTransform: "uppercase",
-                letterSpacing: 1.2,
-                marginBottom: 6,
-              }}
-            >
-              Image
-            </div>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) =>
-                void handleImageUpload(e.currentTarget.files?.[0] ?? null)
-              }
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                background: C.card2,
-                border: `1px solid ${C.border}`,
-                borderRadius: 9,
-                padding: "9px 12px",
-                color: C.text,
-                fontSize: 13,
-                outline: "none",
-                fontFamily: "var(--sans)",
-              }}
-            />
-            {modal.data.image ? (
-              <div
-                style={{
-                  marginTop: 10,
-                  height: 140,
-                  borderRadius: 12,
-                  overflow: "hidden",
-                  border: `1px solid ${C.border}`,
-                  background: C.card2,
-                }}
-              >
-                <img
-                  src={modal.data.image}
-                  alt="Ingredient preview"
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    display: "block",
-                  }}
-                />
-              </div>
-            ) : null}
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "0 12px",
-            }}
-          >
-            <Inp
-              label="ຫົວໜ່ວຍ"
-              value={modal.data.unit}
-              onChange={(e) => setField("unit", e.target.value)}
-            />
-            <Inp
-              label="ຈຳນວນ"
-              type="number"
-              value={modal.data.cur}
-              onChange={(e) => setField("cur", e.target.value)}
-            />
-            <Inp
-              label="ຫຼັກ"
-              type="number"
-              value={modal.data.min}
-              onChange={(e) => setField("min", e.target.value)}
-            />
-          </div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setModal(null)}>
-              ຍົກເລີກ
-            </Btn>
-            <Btn onClick={submitStock}>ບັນທຶກ</Btn>
-          </div>
-        </Modal>
+        <StockFormModal
+          modal={modal}
+          onClose={() => setModal(null)}
+          setField={setField}
+          handleImageUpload={handleImageUpload}
+          submitStock={submitStock}
+        />
       )}
 
       {modal?.type === "stock-receive" && (
-        <Modal title={modal.title ?? "ຮັບເຂົ້າ"} onClose={() => setModal(null)}>
-          <Inp
-            label={`ຈຳນວນ (${modal.data.unit})`}
-            type="number"
-            value={modal.data.qty}
-            onChange={(e) => setField("qty", e.target.value)}
-          />
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setModal(null)}>
-              ຍົກເລີກ
-            </Btn>
-            <Btn onClick={submitReceive}>ຢືນຢັນ</Btn>
-          </div>
-        </Modal>
+        <StockReceiveModal
+          modal={modal}
+          onClose={() => setModal(null)}
+          setField={setField}
+          submitReceive={submitReceive}
+        />
       )}
 
       {modal?.type === "confirm" && (
-        <Modal title={modal.title ?? "ຢືນຢັນ"} onClose={() => setModal(null)}>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 16,
-              padding: "10px 0",
-            }}
-          >
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: "50%",
-                background: "rgba(208,64,48,0.12)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <AlertTriangle size={22} color={C.red} />
-            </div>
-            <p
-              style={{
-                fontSize: 14,
-                color: C.textMid,
-                textAlign: "center",
-                margin: 0,
-                lineHeight: 1.6,
-              }}
-            >
-              {modal.msg}
-            </p>
-            <div style={{ display: "flex", gap: 10 }}>
-              <Btn variant="secondary" onClick={() => setModal(null)}>
-                ຍົກເລີກ
-              </Btn>
-              <Btn
-                variant="danger"
-                onClick={modal.onConfirm ?? (() => setModal(null))}
-              >
-                ຢືນຢັນ
-              </Btn>
-            </div>
-          </div>
-        </Modal>
+        <ConfirmModal modal={modal} onClose={() => setModal(null)} />
       )}
 
       {modal?.type === "qr-display" && (
-        <Modal title={modal.title ?? "QR Bill"} onClose={() => setModal(null)}>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 20,
-            }}
-          >
-            <div style={{ background: C.card2, borderRadius: 16, padding: 18 }}>
-              <img
-                src={QR_URL(modal.data.id)}
-                width={160}
-                height={160}
-                alt={modal.data.id}
-                style={{ display: "block", borderRadius: 14 }}
-              />
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: C.text }}>
-                {modal.data.id}
-              </div>
-              <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>
-                {modal.data.createdAt}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 10, width: "100%" }}>
-              <Btn variant="secondary" onClick={() => setModal(null)}>
-                ປິດ
-              </Btn>
-              <Btn onClick={() => setModal(null)}>ບັນທຶກ</Btn>
-            </div>
-          </div>
-        </Modal>
+        <QrDisplayModal modal={modal} onClose={() => setModal(null)} />
       )}
 
-      <div
-        style={{
-          position: "fixed",
-          bottom: 24,
-          right: 24,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-          zIndex: 1100,
-        }}
-      >
+      <div className="toast-stack">
         {toasts.map((t) => (
           <div
             key={t.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              background: C.card2,
-              border: `1px solid ${C.border}`,
-              borderRadius: 14,
-              padding: "12px 16px",
-              minWidth: 260,
-            }}
+            className="toast-item"
           >
             {t.type === "error" ? (
               <AlertTriangle size={15} color={C.red} />
             ) : (
               <CheckCircle size={15} color={C.green} />
             )}
-            <span style={{ fontSize: 13, color: C.text }}>{t.msg}</span>
+            <span className="toast-text">{t.msg}</span>
           </div>
         ))}
       </div>
