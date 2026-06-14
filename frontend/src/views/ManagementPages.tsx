@@ -7,6 +7,8 @@ import type { MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem 
 
 type DispatchModal = Dispatch<SetStateAction<AppModalState>>;
 
+const staffRoleLabel = (role: string) => (role === "manager" ? "Admin" : "Staff");
+
 export function BillingView({
   sessions,
   menu,
@@ -372,27 +374,43 @@ export function ReportsView({
 
 export function StaffView({
   staff,
+  isAdmin,
   setModal,
   deleteStaff,
 }: {
   staff: StaffItem[];
+  isAdmin: boolean;
   setModal: DispatchModal;
   deleteStaff: (id: number, name: string) => void;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <Btn
-          onClick={() =>
-            setModal({
-              type: "staff-form",
-              title: "ເພີ່ມພະນັກງານ",
-              data: { name: "", role: "ພະນັກງານ", since: "", orders: 0, emoji: "👩‍🍳" },
-            })
-          }
-        >
-          <Plus size={14} /> ເພີ່ມພະນັກ
-        </Btn>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div style={{ color: C.textDim, fontSize: 12 }}>
+          {isAdmin ? "Admin access" : "View only"}
+        </div>
+        {isAdmin && (
+          <Btn
+            onClick={() =>
+              setModal({
+                type: "staff-form",
+                title: "ເພີ່ມພະນັກງານ",
+                data: {
+                  name: "",
+                  role: "employee",
+                  phone: "",
+                  username: "",
+                  password: "",
+                  since: "",
+                  orders: 0,
+                  emoji: "👩‍🍳",
+                },
+              })
+            }
+          >
+            <Plus size={14} /> ເພີ່ມພະນັກ
+          </Btn>
+        )}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 14 }}>
         {staff.map((s) => (
@@ -401,23 +419,25 @@ export function StaffView({
               <div style={{ width: 46, height: 46, borderRadius: "50%", background: C.goldDim, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>{s.emoji || "👤"}</div>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{s.name}</div>
-                <div style={{ fontSize: 11, color: C.textDim }}>{s.role}</div>
+                <div style={{ fontSize: 11, color: C.textDim }}>{staffRoleLabel(s.role)}</div>
               </div>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
               <div>
-                <div style={{ fontSize: 10, color: C.textMid }}>ເລີ່ມເວລາ</div>
-                <div style={{ fontSize: 13, color: C.text }}>{s.since}</div>
+                <div style={{ fontSize: 10, color: C.textMid }}>Username</div>
+                <div style={{ fontSize: 13, color: C.text }}>{s.username ?? s.since}</div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 10, color: C.textMid }}>ລາຍການ</div>
                 <div style={{ fontSize: 13, color: C.text }}>{s.orders}</div>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setModal({ type: "staff-form", title: "ແກ້ໄຂພະນັກງານ", data: { ...s } })} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>ແກ້ໄຂ</button>
-              <button onClick={() => deleteStaff(s.id, s.name)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid rgba(208,64,48,0.3)`, background: "rgba(208,64,48,0.08)", color: C.red, cursor: "pointer" }}>ລຶບ</button>
-            </div>
+            {isAdmin && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setModal({ type: "staff-form", title: "ແກ້ໄຂພະນັກງານ", data: { ...s, password: "" } })} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>ແກ້ໄຂ</button>
+                <button onClick={() => deleteStaff(s.id, s.name)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid rgba(208,64,48,0.3)`, background: "rgba(208,64,48,0.08)", color: C.red, cursor: "pointer" }}>ລຶບ</button>
+              </div>
+            )}
           </div>
         ))}
       </div>

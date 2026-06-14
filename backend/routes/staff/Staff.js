@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 
 // We will pass the database pool from server.js to here
 module.exports = (pool) => {
+    const jwtSecret = process.env.JWT_SECRET || 'restaurant-local-dev-secret';
 
     const splitName = (value = "") => {
         const parts = String(value).trim().split(/\s+/).filter(Boolean);
@@ -17,6 +18,31 @@ module.exports = (pool) => {
         }
 
         return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+    };
+
+    const normalizeRole = (role) =>
+        role === 'ເຈົ້າຂອງ' || role === 'admin' || role === 'manager'
+            ? 'manager'
+            : 'employee';
+
+    const requireAdmin = (req, res, next) => {
+        const authHeader = req.headers.authorization || '';
+        const token = authHeader.startsWith('Bearer ')
+            ? authHeader.slice(7)
+            : null;
+
+        if (!token) {
+            return res.status(401).json({ error: 'Login required' });
+        }
+
+        jwt.verify(token, jwtSecret, (err, user) => {
+            if (err) return res.status(401).json({ error: 'Invalid login' });
+            if (user.role !== 'manager') {
+                return res.status(403).json({ error: 'Admin only' });
+            }
+            req.user = user;
+            next();
+        });
     };
 
     // GET all staff
@@ -40,7 +66,7 @@ module.exports = (pool) => {
     });
 
     // Basic CRUD for the frontend staff page
-    router.post('/', (req, res) => {
+    router.post('/', requireAdmin, async (req, res) => {
         const {
             name,
             firstName: bodyFirstName,
@@ -54,25 +80,35 @@ module.exports = (pool) => {
         const firstName = bodyFirstName ?? split.firstName;
         const lastName = bodyLastName ?? split.lastName;
         const finalUsername = username || `${firstName || 'staff'}_${Date.now()}`;
-        const normalizedRole = role === 'ເຈົ້າຂອງ' ? 'manager' : role;
+        const normalizedRole = normalizeRole(role);
 
-        const query = 'INSERT INTO staff (first_name, last_name, role, username, password, phone) VALUES (?, ?, ?, ?, ?, ?)';
-        pool.query(query, [firstName, lastName, normalizedRole, finalUsername, password, phone], (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({
-                message: 'Staff created successfully!',
-                id: result.insertId,
-                staffId: result.insertId,
-                staff_id: result.insertId,
-                firstName,
-                lastName,
-                name: `${firstName} ${lastName}`.trim(),
-                username: finalUsername
+        try {
+            const hashedPassword = await bcrypt.hash(String(password || 'password'), 10);
+            const query = 'INSERT INTO staff (first_name, last_name, role, username, password, phone) VALUES (?, ?, ?, ?, ?, ?)';
+            pool.query(query, [firstName, lastName, normalizedRole, finalUsername, hashedPassword, phone], (err, result) => {
+                if (err) {
+                    if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Username already exists' });
+                    return res.status(500).json({ error: err.message });
+                }
+                res.status(201).json({
+                    message: 'Staff created successfully!',
+                    id: result.insertId,
+                    staffId: result.insertId,
+                    staff_id: result.insertId,
+                    firstName,
+                    lastName,
+                    name: `${firstName} ${lastName}`.trim(),
+                    role: normalizedRole,
+                    phone,
+                    username: finalUsername
+                });
             });
-        });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
     });
 
-    router.put('/:id', (req, res) => {
+    router.put('/:id', requireAdmin, async (req, res) => {
         const { id } = req.params;
         const {
             name,
@@ -86,25 +122,33 @@ module.exports = (pool) => {
         const split = splitName(name);
         const firstName = bodyFirstName ?? split.firstName;
         const lastName = bodyLastName ?? split.lastName;
-        const normalizedRole = role === 'ເຈົ້າຂອງ' ? 'manager' : role;
+        const normalizedRole = normalizeRole(role);
 
-        const query = password
-            ? 'UPDATE staff SET first_name = ?, last_name = ?, role = ?, username = COALESCE(?, username), phone = ?, password = ? WHERE staff_id = ?'
-            : 'UPDATE staff SET first_name = ?, last_name = ?, role = ?, username = COALESCE(?, username), phone = ? WHERE staff_id = ?';
-        const values = password
-            ? [firstName, lastName, normalizedRole, username || null, phone, password, id]
-            : [firstName, lastName, normalizedRole, username || null, phone, id];
+        try {
+            const hashedPassword = password ? await bcrypt.hash(String(password), 10) : null;
+            const query = hashedPassword
+                ? 'UPDATE staff SET first_name = ?, last_name = ?, role = ?, username = COALESCE(?, username), phone = ?, password = ? WHERE staff_id = ?'
+                : 'UPDATE staff SET first_name = ?, last_name = ?, role = ?, username = COALESCE(?, username), phone = ? WHERE staff_id = ?';
+            const values = hashedPassword
+                ? [firstName, lastName, normalizedRole, username || null, phone, hashedPassword, id]
+                : [firstName, lastName, normalizedRole, username || null, phone, id];
 
-        pool.query(query, values, (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (result.affectedRows === 0) {
-                return res.status(404).json({ message: 'Staff not found' });
-            }
-            res.json({ message: 'Staff updated successfully!' });
-        });
+            pool.query(query, values, (err, result) => {
+                if (err) {
+                    if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Username already exists' });
+                    return res.status(500).json({ error: err.message });
+                }
+                if (result.affectedRows === 0) {
+                    return res.status(404).json({ message: 'Staff not found' });
+                }
+                res.json({ message: 'Staff updated successfully!' });
+            });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
     });
 
-    router.delete('/:id', (req, res) => {
+    router.delete('/:id', requireAdmin, (req, res) => {
         const { id } = req.params;
         const query = 'DELETE FROM staff WHERE staff_id = ?';
 
@@ -118,7 +162,7 @@ module.exports = (pool) => {
     });
 
     // Staff register route
-    router.post('/register', async (req, res) => {
+    router.post('/register', requireAdmin, async (req, res) => {
         const {first_name, last_name, role, username, password, phone } = req.body;
         try {
             const salt = await bcrypt.genSalt(10);
@@ -140,6 +184,10 @@ module.exports = (pool) => {
     // Staff login route
     router.post('/login', (req, res) => {
         const { username, password } = req.body;
+        if (!username || !password) {
+            return res.status(400).json({ error: "Username and password are required" });
+        }
+
         const query = 'SELECT * FROM staff WHERE username = ?';
         
         pool.query(query, [username], async (err, results) => {
@@ -147,19 +195,28 @@ module.exports = (pool) => {
             if (results.length === 0) return res.status(401).json({ error: "Invalid username or password"});
 
             const staff = results[0];
-            const isMatch = await bcrypt.compare(password, staff.password);
+            const storedPassword = String(staff.password || '');
+            const isHash = storedPassword.startsWith('$2');
+            const isMatch = isHash
+                ? await bcrypt.compare(password, storedPassword)
+                : password === storedPassword;
             if (!isMatch) return res.status(401).json({ error: "Invalid username or password"});
 
             const token = jwt.sign(
                 { staff_id: staff.staff_id, role: staff.role}, 
-                process.env.JWT_SECRET, 
+                jwtSecret, 
                 {expiresIn: '1d'}
             );
 
             res.json({
                 message: "Login Successful!",
                 token,
-                staff: { id: staff.staff_id, name: staff.first_name, role: staff.role }
+                staff: {
+                    id: staff.staff_id,
+                    name: `${staff.first_name} ${staff.last_name || ''}`.trim(),
+                    role: staff.role,
+                    username: staff.username
+                }
             });
         });
     });

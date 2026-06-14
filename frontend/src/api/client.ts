@@ -9,6 +9,25 @@ const API = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+const setAuthToken = (token: string | null) => {
+  if (token) {
+    API.defaults.headers.common.Authorization = `Bearer ${token}`;
+  } else {
+    delete API.defaults.headers.common.Authorization;
+  }
+};
+
+type LoginResponse = {
+  message?: string;
+  token: string;
+  staff: {
+    id: number;
+    name: string;
+    role: string;
+    username?: string | null;
+  };
+};
+
 type MenuRow = {
   menuId?: number;
   menu_id?: number;
@@ -177,6 +196,7 @@ type StaffCreateInput = {
   emoji?: string;
   phone?: string | null;
   username?: string | null;
+  password?: string | null;
 };
 
 type StockCreateInput = {
@@ -469,14 +489,19 @@ const createMenuPayload = (data: MenuCreateInput) => ({
 
 const createStaffPayload = (data: StaffCreateInput) => {
   const { firstName, lastName } = splitName(data.name);
-  return {
+  const payload: Record<string, unknown> = {
     first_name: firstName,
     last_name: lastName,
     role: data.role === "ເຈົ້າຂອງ" || data.role === "manager" ? "manager" : "employee",
     phone: data.phone ?? null,
     username: data.username ?? `staff_${Date.now()}`,
-    password: "password",
   };
+
+  if (data.password) {
+    payload.password = data.password;
+  }
+
+  return payload;
 };
 
 const createSessionPayload = (data: SessionCreateInput) => ({
@@ -505,6 +530,14 @@ const createRecipePayload = (data: RecipeCreateInput) => ({
 });
 
 export const apiClient = {
+  auth: {
+    setToken: setAuthToken,
+    login: async (data: { username: string; password: string }): Promise<LoginResponse> => {
+      const response = await API.post<LoginResponse>("/staffs/login", data);
+      return response.data;
+    },
+  },
+
   menus: {
     getAll: async (): Promise<MenuItem[]> => {
       const response = await API.get<MenuRow[]>("/menus");
@@ -563,6 +596,7 @@ export const apiClient = {
       emoji: data.emoji,
       phone: data.phone,
       username: data.username,
+      password: data.password,
     })),
     delete: (id: number) => API.delete(`/staffs/${id}`),
   },

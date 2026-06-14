@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -57,6 +57,29 @@ import "./index.css";
 import "./App.css";
 
 type Toast = { id: number; msg: string; type: "success" | "error" | "info" };
+type AuthUser = {
+  id: number;
+  name: string;
+  role: string;
+  username?: string | null;
+  token: string;
+};
+
+const AUTH_STORAGE_KEY = "olay-auth-user";
+
+const readStoredUser = (): AuthUser | null => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const saved = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+};
+
+const roleLabel = (role?: string | null) =>
+  role === "manager" ? "Admin" : "Staff";
 
 export default function App() {
   const [view, setView] = useState<string>("dashboard");
@@ -76,7 +99,14 @@ export default function App() {
   const [modal, setModal] = useState<AppModalState>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [loaded, setLoaded] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() =>
+    readStoredUser(),
+  );
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
+  const [loginError, setLoginError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
   const paymentLocks = useRef(new Set<string>());
+  const isAdmin = currentUser?.role === "manager";
 
   const parseSessionId = (
     value: string | number | null | undefined,
@@ -144,12 +174,56 @@ export default function App() {
     })();
   }, []);
 
+  useEffect(() => {
+    apiClient.auth.setToken(currentUser?.token ?? null);
+  }, [currentUser?.token]);
+
   // Data is now persisted via API - no need for localStorage
 
   const toast = (msg: string, type: Toast["type"] = "success") => {
     const id = Date.now();
     setToasts((p) => [...p, { id, msg, type }]);
     setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 4200);
+  };
+
+  const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const username = loginForm.username.trim();
+    const password = loginForm.password;
+
+    if (!username || !password) {
+      setLoginError("Enter username and password.");
+      return;
+    }
+
+    setLoginLoading(true);
+    setLoginError("");
+
+    try {
+      const result = await apiClient.auth.login({ username, password });
+      const user: AuthUser = {
+        ...result.staff,
+        token: result.token,
+      };
+
+      apiClient.auth.setToken(user.token);
+      setCurrentUser(user);
+      window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+      setLoginForm({ username: "", password: "" });
+    } catch (err) {
+      console.error("Login failed", err);
+      setLoginError("Invalid username or password.");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const logout = () => {
+    apiClient.auth.setToken(null);
+    setCurrentUser(null);
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    setView("dashboard");
+    setModal(null);
   };
 
   const setField = (field: string, value: any) =>
@@ -593,28 +667,46 @@ export default function App() {
   const submitStaff = async () => {
     if (!modal?.data) return;
     const data = modal.data;
-    if (!data.name) {
-      toast("ໃສ່ຊື່", "error");
+    if (!isAdmin) {
+      toast("Admin only", "error");
       return;
     }
+
+    const username = String(data.username ?? "").trim();
+    const password = String(data.password ?? "");
+
+    if (!data.name || !username || (!data.id && !password)) {
+      toast("ໃສ່ຊື່, username ແລະ password", "error");
+      return;
+    }
+
+    const staffPayload = {
+      ...data,
+      username,
+      password: password || undefined,
+      orders: Number(data.orders || 0),
+    };
+    const visibleStaff = { ...staffPayload };
+    delete (visibleStaff as { password?: string }).password;
+
     try {
       if (data.id) {
-        await apiClient.staff.update(data.id, data);
+        await apiClient.staff.update(data.id, staffPayload);
         setStaff((p) =>
-          p.map((s) => (s.id === data.id ? { ...s, ...data } : s)),
+          p.map((s) => (s.id === data.id ? { ...s, ...visibleStaff } : s)),
         );
         toast(`ອັບເດດ «${data.name}»`);
       } else {
-        const result = await apiClient.staff.create({
-          ...data,
-          orders: Number(data.orders || 0),
-        });
+        const result = await apiClient.staff.create(staffPayload);
+        const saved = result.data ?? {};
         setStaff((p) => [
           ...p,
           {
-            ...data,
-            id: result.data.staff_id,
-            orders: Number(data.orders || 0),
+            ...visibleStaff,
+            id: saved.staff_id ?? saved.staffId ?? saved.id,
+            role: saved.role ?? visibleStaff.role,
+            username: saved.username ?? visibleStaff.username,
+            since: saved.username ?? visibleStaff.username ?? "—",
           },
         ]);
         toast(`ເພີ່ມ «${data.name}»`);
@@ -627,23 +719,25 @@ export default function App() {
   };
 
   const deleteStaff = (id: number, name: string) =>
-    setModal({
-      type: "confirm",
-      title: "ລົບພະນັກ",
-      msg: `ລົບ «${name}» ບໍ?`,
-      data: { id },
-      onConfirm: async () => {
-        try {
-          await apiClient.staff.delete(id);
-          setStaff((p) => p.filter((s) => s.id !== id));
-          toast(`ລົບ «${name}» ສຳເລັດ`, "info");
-          setModal(null);
-        } catch (err) {
-          console.error("Delete failed", err);
-          toast("ຜິດພາດ", "error");
-        }
-      },
-    });
+    isAdmin
+      ? setModal({
+          type: "confirm",
+          title: "ລົບພະນັກ",
+          msg: `ລົບ «${name}» ບໍ?`,
+          data: { id },
+          onConfirm: async () => {
+            try {
+              await apiClient.staff.delete(id);
+              setStaff((p) => p.filter((s) => s.id !== id));
+              toast(`ລົບ «${name}» ສຳເລັດ`, "info");
+              setModal(null);
+            } catch (err) {
+              console.error("Delete failed", err);
+              toast("ຜິດພາດ", "error");
+            }
+          },
+        })
+      : toast("Admin only", "error");
 
   const submitStock = async () => {
     if (!modal?.data) return;
@@ -987,6 +1081,51 @@ export default function App() {
     );
   }
 
+  if (!currentUser) {
+    return (
+      <div className="login-page">
+        <form className="login-panel" onSubmit={submitLogin}>
+          <div className="login-logo">
+            <ChefHat size={24} color={C.gold} />
+          </div>
+          <div className="login-kicker">Olay Khao Soi</div>
+          <div className="login-title">Staff login</div>
+          <label className="login-field">
+            <span>Username</span>
+            <input
+              autoFocus
+              value={loginForm.username}
+              onChange={(e) =>
+                setLoginForm((current) => ({
+                  ...current,
+                  username: e.target.value,
+                }))
+              }
+            />
+          </label>
+          <label className="login-field">
+            <span>Password</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={loginForm.password}
+              onChange={(e) =>
+                setLoginForm((current) => ({
+                  ...current,
+                  password: e.target.value,
+                }))
+              }
+            />
+          </label>
+          {loginError && <div className="login-error">{loginError}</div>}
+          <button className="login-submit" type="submit" disabled={loginLoading}>
+            {loginLoading ? "Signing in..." : "Sign in"}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <div className="app-sidebar">
@@ -1016,7 +1155,7 @@ export default function App() {
           active={false}
           onClick={() => {}}
         />
-        <NavBtn icon={LogOut} label="ອອກ" active={false} onClick={() => {}} />
+        <NavBtn icon={LogOut} label="ອອກ" active={false} onClick={logout} />
       </div>
 
       <div className="app-main">
@@ -1038,8 +1177,12 @@ export default function App() {
               <Bell size={17} color={C.textMid} />
               <div className="app-notification-dot" />
             </div>
+            <div className="app-user">
+              <div className="app-user-name">{currentUser.name}</div>
+              <div className="app-user-role">{roleLabel(currentUser.role)}</div>
+            </div>
             <div className="app-avatar">
-              ໂ
+              {currentUser.name?.slice(0, 1).toUpperCase() || "U"}
             </div>
           </div>
         </div>
@@ -1107,6 +1250,7 @@ export default function App() {
           {view === "staff" && (
             <StaffView
               staff={staff}
+              isAdmin={isAdmin}
               setModal={setModal}
               deleteStaff={deleteStaff}
             />
