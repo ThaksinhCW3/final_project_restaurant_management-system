@@ -12,6 +12,7 @@ const sessionTotal = (session: SessionItem, menu: MenuItem[]): number =>
 interface POSProps {
   sessions: SessionItem[];
   menu: MenuItem[];
+  addMenu?: MenuItem[];
   selectedSessionId: string | null;
   setSelectedSessionId: (id: string | null) => void;
   showAddItems: boolean;
@@ -28,6 +29,7 @@ interface POSProps {
 export default function POS({
   sessions,
   menu,
+  addMenu = menu,
   selectedSessionId,
   setSelectedSessionId,
   showAddItems,
@@ -144,7 +146,7 @@ export default function POS({
             {showAddItems && (
               <div style={{ borderTop: `1px solid ${C.border}`, padding: "12px 16px", maxHeight: 185, overflow: "auto" }}>
                 <div style={{ fontSize: 11, color: C.textMid, marginBottom: 8 }}>Add menu item:</div>
-                {menu.filter(item => item.ok).map(item => (
+                {addMenu.filter(item => item.ok).map(item => (
                   <button
                     key={item.id}
                     onClick={() => addItem(selectedSession.id, item.id)}

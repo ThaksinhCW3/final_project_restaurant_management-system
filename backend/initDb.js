@@ -3,7 +3,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const seedIfEmpty = async (db, table, sql, values = []) => {
   const [rows] = await db.query(`SELECT COUNT(*) AS count FROM ${table}`);
   if (Number(rows[0]?.count ?? 0) === 0) {
-    await db.query(sql, values);
+    try {
+      await db.query(sql, values);
+    } catch (err) {
+      console.warn(`Skipping seed for ${table}: ${err.message}`);
+    }
   }
 };
 
@@ -201,15 +205,15 @@ const seedData = async (db) => {
 
   await seedIfEmpty(db, "staff", `
     INSERT INTO staff (staff_id, first_name, last_name, role, phone, username, password) VALUES
-      (1, 'Olay', 'Owner', 'manager', '02000000001', 'olay', 'password'),
-      (2, 'Som', 'Cook', 'employee', '02000000002', 'som', 'password'),
-      (3, 'Daeng', 'Cook', 'employee', '02000000003', 'daeng', 'password')
+      (1, 'Olay', 'Owner', 'manager', '0200000001', 'olay', 'password'),
+      (2, 'Som', 'Cook', 'employee', '0200000002', 'som', 'password'),
+      (3, 'Daeng', 'Cook', 'employee', '0200000003', 'daeng', 'password')
   `);
 
   await seedIfEmpty(db, "suppliers", `
-    INSERT INTO suppliers (supplier_id, supplier_name, phone, address) VALUES
-      (1, 'Morning Market', '02000001001', 'Luang Prabang'),
-      (2, 'Fresh Meat Supplier', '02000001002', 'Luang Prabang')
+    INSERT INTO suppliers (supplier_id, supplier_name, phone) VALUES
+      (1, 'Morning Market', '0200001001'),
+      (2, 'Fresh Meat Supplier', '0200001002')
   `);
 
   await seedIfEmpty(db, "ingredients", `

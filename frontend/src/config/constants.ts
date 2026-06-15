@@ -100,7 +100,7 @@ export const PAY_METHODS = [
 
 export const BILL_URL = (id: string): string => {
   const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
-  return `${origin}/?bill=${encodeURIComponent(id)}`;
+  return `${origin}/customer?bill=${encodeURIComponent(id)}`;
 };
 
 export const QR_URL = (id: string): string => {

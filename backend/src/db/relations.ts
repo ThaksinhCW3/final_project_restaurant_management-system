@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { imports, importDetails, ingredients, supplyOrders, staff, suppliers, categories, menus, orders, orderItems, serviceSessions, recipes, sales, supplyOrderDetails } from "./schema";
+import { imports, importDetails, ingredients, supplyOrders, staff, suppliers, categories, menus, orders, orderItems, serviceSessions, recipes, sales, supplyOrderDetails, attributeTypes, attributes, menuAttributes } from "./schema";
 
 export const importDetailsRelations = relations(importDetails, ({one}) => ({
 	import: one(imports, {
@@ -66,6 +66,30 @@ export const menusRelations = relations(menus, ({one, many}) => ({
 	}),
 	orderItems: many(orderItems),
 	recipes: many(recipes),
+	menuAttributes: many(menuAttributes),
+}));
+
+export const attributeTypesRelations = relations(attributeTypes, ({many}) => ({
+	attributes: many(attributes),
+}));
+
+export const attributesRelations = relations(attributes, ({one, many}) => ({
+	attributeType: one(attributeTypes, {
+		fields: [attributes.attributeTypeId],
+		references: [attributeTypes.attributeTypeId]
+	}),
+	menuAttributes: many(menuAttributes),
+}));
+
+export const menuAttributesRelations = relations(menuAttributes, ({one}) => ({
+	menu: one(menus, {
+		fields: [menuAttributes.menuId],
+		references: [menus.menuId]
+	}),
+	attribute: one(attributes, {
+		fields: [menuAttributes.attributeId],
+		references: [attributes.attributeId]
+	}),
 }));
 
 export const categoriesRelations = relations(categories, ({many}) => ({

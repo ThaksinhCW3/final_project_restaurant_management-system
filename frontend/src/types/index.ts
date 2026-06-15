@@ -10,6 +10,21 @@ export interface MenuItem {
   emoji: string;
   categoryId?: number | null;
   image?: string | null;
+  optionGroups?: MenuOptionGroup[];
+}
+
+export interface MenuOptionValue {
+  id?: number | string;
+  name: string;
+  priceDelta: number | string;
+}
+
+export interface MenuOptionGroup {
+  id?: number | string;
+  name: string;
+  selectionType: "single" | "multiple";
+  required: boolean;
+  values: MenuOptionValue[];
 }
 
 export interface StaffItem {

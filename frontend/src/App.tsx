@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -34,6 +34,7 @@ import {
   StockReceiveModal,
 } from "./components/modals";
 import Dashboard from "./views/Dashboard";
+import CustomerPage from "./views/CustomerPage";
 import {
   BillingView,
   MenuView,
@@ -96,6 +97,13 @@ export default function App() {
   const [activeCat, setActiveCat] = useState<string>("ທັງໝົດ");
   const [showAddItems, setShowAddItems] = useState<boolean>(false);
   const [stockFilter, setStockFilter] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [showSearchSuggestions, setShowSearchSuggestions] = useState<boolean>(false);
+  const [searchSuggestionsClosing, setSearchSuggestionsClosing] = useState<boolean>(false);
+  const [showNotifications, setShowNotifications] = useState<boolean>(false);
+  const [clearedNotificationIds, setClearedNotificationIds] = useState<string[]>([]);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(66);
+  const [sidebarHidden, setSidebarHidden] = useState<boolean>(false);
   const [modal, setModal] = useState<AppModalState>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [loaded, setLoaded] = useState<boolean>(false);
@@ -264,6 +272,81 @@ export default function App() {
       const recipeItems = [...(prev.data.recipeItems ?? [])];
       recipeItems.splice(index, 1);
       return { ...prev, data: { ...prev.data, recipeItems } };
+    });
+
+  const addMenuOptionGroup = () =>
+    setModal((prev) =>
+      prev
+        ? {
+            ...prev,
+            data: {
+              ...prev.data,
+              optionGroups: [
+                ...(prev.data.optionGroups ?? []),
+                {
+                  id: `group-${Date.now()}`,
+                  name: "",
+                  selectionType: "single",
+                  required: false,
+                  values: [{ id: `value-${Date.now()}`, name: "", priceDelta: "" }],
+                },
+              ],
+            },
+          }
+        : prev,
+    );
+
+  const setMenuOptionGroupField = (groupIndex: number, field: string, value: any) =>
+    setModal((prev) => {
+      if (!prev) return prev;
+      const optionGroups = [...(prev.data.optionGroups ?? [])];
+      optionGroups[groupIndex] = { ...optionGroups[groupIndex], [field]: value };
+      return { ...prev, data: { ...prev.data, optionGroups } };
+    });
+
+  const removeMenuOptionGroup = (groupIndex: number) =>
+    setModal((prev) => {
+      if (!prev) return prev;
+      const optionGroups = [...(prev.data.optionGroups ?? [])];
+      optionGroups.splice(groupIndex, 1);
+      return { ...prev, data: { ...prev.data, optionGroups } };
+    });
+
+  const addMenuOptionValue = (groupIndex: number) =>
+    setModal((prev) => {
+      if (!prev) return prev;
+      const optionGroups = [...(prev.data.optionGroups ?? [])];
+      const group = optionGroups[groupIndex];
+      optionGroups[groupIndex] = {
+        ...group,
+        values: [
+          ...(group.values ?? []),
+          { id: `value-${Date.now()}`, name: "", priceDelta: "" },
+        ],
+      };
+      return { ...prev, data: { ...prev.data, optionGroups } };
+    });
+
+  const setMenuOptionValueField = (groupIndex: number, valueIndex: number, field: string, value: any) =>
+    setModal((prev) => {
+      if (!prev) return prev;
+      const optionGroups = [...(prev.data.optionGroups ?? [])];
+      const group = optionGroups[groupIndex];
+      const values = [...(group.values ?? [])];
+      values[valueIndex] = { ...values[valueIndex], [field]: value };
+      optionGroups[groupIndex] = { ...group, values };
+      return { ...prev, data: { ...prev.data, optionGroups } };
+    });
+
+  const removeMenuOptionValue = (groupIndex: number, valueIndex: number) =>
+    setModal((prev) => {
+      if (!prev) return prev;
+      const optionGroups = [...(prev.data.optionGroups ?? [])];
+      const group = optionGroups[groupIndex];
+      const values = [...(group.values ?? [])];
+      values.splice(valueIndex, 1);
+      optionGroups[groupIndex] = { ...group, values };
+      return { ...prev, data: { ...prev.data, optionGroups } };
     });
 
   const handleImageUpload = async (file: File | null, field = "image") => {
@@ -557,22 +640,52 @@ export default function App() {
       toast("ໃສ່ຂໍ້ມູນທີ່ຈໍາເປັນ", "error");
       return;
     }
+    const selectedCategoryId =
+      data.categoryId == null || data.categoryId === ""
+        ? null
+        : Number(data.categoryId);
     const selectedCategoryName = String(data.cat ?? data.category_name ?? "");
-    const category = categories.find((c) => {
-      const categoryId = c.category_id ?? c.id ?? c.categoryId;
-      const categoryName = c.category_name ?? c.categoryName ?? c.name;
-      return (
-        categoryId === data.categoryId || categoryName === selectedCategoryName
-      );
-    });
+    const category =
+      selectedCategoryId !== null
+        ? categories.find((c) => Number(c.category_id ?? c.id ?? c.categoryId) === selectedCategoryId)
+        : categories.find((c) => {
+            const categoryName = c.category_name ?? c.categoryName ?? c.name;
+            return categoryName === selectedCategoryName;
+          });
+    const categoryName =
+      category?.category_name ?? category?.categoryName ?? category?.name ?? selectedCategoryName;
+    const cleanedOptionGroups = (data.optionGroups ?? [])
+      .map((group: any) => ({
+        ...group,
+        name: String(group.name ?? "").trim(),
+        values: (group.values ?? [])
+          .map((value: any) => ({
+            ...value,
+            name: String(value.name ?? "").trim(),
+            priceDelta: Number(value.priceDelta || 0),
+          }))
+          .filter((value: any) => value.name),
+      }))
+      .filter((group: any) => group.name || group.values.length);
+    const invalidOptionGroup = cleanedOptionGroups.find(
+      (group: any) => !group.name || group.values.length === 0,
+    );
+
+    if (invalidOptionGroup) {
+      toast("ໃສ່ຊື່ option ແລະ value ຢ່າງໜ້ອຍ 1 ລາຍການ", "error");
+      return;
+    }
+
     const cleaned = {
       ...data,
       price: Number(data.price),
+      cat: categoryName,
       sold: data.sold ?? 0,
       ok: Boolean(data.ok),
       emoji: data.emoji || "🍜",
       categoryId:
         category?.category_id ?? category?.id ?? category?.categoryId ?? null,
+      optionGroups: cleanedOptionGroups,
     };
     try {
       let savedMenuId = Number(data.id || 0);
@@ -957,6 +1070,168 @@ export default function App() {
   const revenueTotal = sales.reduce((sum, sale) => sum + sale.total, 0);
   const activeBillsCount = sessions.length;
   const pendingBillsCount = sessions.filter(session => session.status === "pending_payment").length;
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const includesSearch = (...values: unknown[]) =>
+    !normalizedSearch ||
+    values.some((value) =>
+      String(value ?? "").toLowerCase().includes(normalizedSearch),
+    );
+  const searchedMenu = menu.filter((item) =>
+    includesSearch(item.name, item.en, item.cat, item.price, item.ok ? "open ເປີດ" : "closed ປິດ"),
+  );
+  const searchedStock = stock.filter((item) =>
+    includesSearch(item.name, item.unit, item.cur, item.min),
+  );
+  const searchedIngredients = ingredients.filter((item) =>
+    includesSearch(item.name, item.unit, item.stockQuantity, item.costPerUnit),
+  );
+  const searchedSessions = sessions.filter((session) =>
+    includesSearch(session.id, session.note, session.payMethod, session.sessionType, session.tableNumber, session.status, session.createdAt),
+  );
+  const searchedSales = sales.filter((sale) =>
+    includesSearch(sale.table, sale.items, sale.total, sale.date, sale.time),
+  );
+  const searchedStaff = staff.filter((member) =>
+    includesSearch(member.name, member.role, member.username, member.phone, member.since),
+  );
+  const closeSearchSuggestions = () => {
+    setSearchSuggestionsClosing(true);
+    window.setTimeout(() => {
+      setShowSearchSuggestions(false);
+      setSearchSuggestionsClosing(false);
+    }, 160);
+  };
+  const startSidebarResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+
+    const move = (moveEvent: PointerEvent) => {
+      const nextWidth = Math.max(52, Math.min(180, startWidth + moveEvent.clientX - startX));
+      setSidebarWidth(nextWidth);
+      if (nextWidth <= 54) {
+        setSidebarHidden(true);
+      }
+    };
+
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  };
+  const suggestionSource = [
+    ...menu.map((item) => ({
+      id: `menu-${item.id}`,
+      title: item.name,
+      page: "Menu",
+      detail: `${item.cat} · ${kip(item.price)} · ${item.ok ? "ເປີດ" : "ປິດ"}`,
+      view: "menu",
+      terms: [item.name, item.en, item.cat, item.price, item.ok ? "open ເປີດ" : "closed ປິດ"],
+    })),
+    ...stock.map((item) => ({
+      id: `stock-${item.id}`,
+      title: item.name,
+      page: "Stock",
+      detail: `${item.cur} ${item.unit} · min ${item.min}`,
+      view: "stock",
+      terms: [item.name, item.unit, item.cur, item.min],
+    })),
+    ...ingredients.map((item) => ({
+      id: `ingredient-${item.id}`,
+      title: item.name,
+      page: "Stock",
+      detail: `${item.stockQuantity} ${item.unit} · cost ${item.costPerUnit}`,
+      view: "stock",
+      terms: [item.name, item.unit, item.stockQuantity, item.costPerUnit],
+    })),
+    ...sessions.map((session) => ({
+      id: `session-${session.id}`,
+      title: session.id,
+      page: "Billing",
+      detail: `${session.note || "Bill"} · ${session.status}`,
+      view: "billing",
+      terms: [session.id, session.note, session.status, session.payMethod, session.tableNumber],
+    })),
+    ...sales.map((sale) => ({
+      id: `sale-${sale.id}`,
+      title: sale.table,
+      page: "Reports",
+      detail: `${kip(sale.total)} · ${sale.date} ${sale.time}`,
+      view: "reports",
+      terms: [sale.table, sale.items, sale.total, sale.date, sale.time],
+    })),
+    ...staff.map((member) => ({
+      id: `staff-${member.id}`,
+      title: member.name,
+      page: "Staff",
+      detail: `${roleLabel(member.role)} · ${member.username ?? member.since}`,
+      view: "staff",
+      terms: [member.name, member.role, member.username, member.phone, member.since],
+    })),
+    ...categories.map((category) => {
+      const name = category.category_name ?? category.categoryName ?? category.name;
+      const id = category.category_id ?? category.categoryId ?? category.id ?? name;
+      return {
+        id: `category-${id}`,
+        title: name,
+        page: "Menu",
+        detail: "Menu category",
+        view: "menu",
+        terms: [name],
+      };
+    }),
+  ];
+  const searchSuggestions = normalizedSearch
+    ? suggestionSource
+        .map((item) => {
+          const haystack = item.terms.map((term) => String(term ?? "").toLowerCase());
+          const starts = haystack.some((term) => term.startsWith(normalizedSearch));
+          const contains = haystack.some((term) => term.includes(normalizedSearch));
+          return { ...item, score: starts ? 0 : contains ? 1 : 2 };
+        })
+        .filter((item) => item.score < 2)
+        .sort((a, b) => a.score - b.score || a.title.localeCompare(b.title))
+        .slice(0, 20)
+    : [];
+  const lowStockItems = stock.filter((item) => item.cur <= item.min);
+  const lowIngredientItems = ingredients.filter((item) => item.stockQuantity <= item.minThreshold);
+  const latestErrorToast = [...toasts].reverse().find((toastItem) => toastItem.type === "error");
+  const generatedNotificationItems = [
+    ...sessions
+      .filter((session) => session.status === "pending_payment")
+      .map((session) => ({
+        id: `pending-${session.id}`,
+        title: "Payment waiting",
+        detail: `${session.id} · ${session.note || "Customer bill"}`,
+        view: "billing",
+      })),
+    ...lowIngredientItems.map((ingredient) => ({
+      id: `ingredient-${ingredient.id}`,
+      title: "Low ingredient stock",
+      detail: `${ingredient.name}: ${ingredient.stockQuantity} ${ingredient.unit}`,
+      view: "stock",
+    })),
+    ...lowStockItems.map((item) => ({
+      id: `stock-${item.id}`,
+      title: "Low stock item",
+      detail: `${item.name}: ${item.cur} ${item.unit}`,
+      view: "stock",
+    })),
+    ...(sessions.length > 0
+      ? [{
+          id: "active-bills",
+          title: "Active bills",
+          detail: `${sessions.length} open · ${pendingBillsCount} waiting payment`,
+          view: "pos",
+        }]
+      : []),
+  ].slice(0, 8);
+  const notificationItems = generatedNotificationItems.filter(
+    (item) => !clearedNotificationIds.includes(item.id),
+  );
 
   const navItems = [
     { id: "dashboard", icon: LayoutDashboard, label: "ຫຼັກ" },
@@ -982,102 +1257,24 @@ export default function App() {
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("bill")
       : null;
+  const isCustomerPage =
+    typeof window !== "undefined" && window.location.pathname === "/customer";
   const customerSession = billId
     ? sessions.find((session) => session.id === billId)
     : null;
 
-  if (billId) {
-    const billTotal = customerSession
-      ? customerSession.items.reduce(
-          (sum, item) =>
-            sum + (menu.find((entry) => entry.id === item.id)?.price ?? 0) * item.qty,
-          0,
-        )
-      : 0;
-    const waitingPayment = customerSession?.status === "pending_payment";
-
+  if (billId || isCustomerPage) {
     return (
-      <div className="customer-page">
-        <div className="customer-shell">
-          <div className="customer-header">
-            <div>
-              <div className="customer-kicker">Olay Khao Soi</div>
-              <div className="customer-bill-id">{billId}</div>
-              <div className="customer-note">{customerSession?.note || "Customer bill"}</div>
-            </div>
-            <div className="customer-total">
-              <div className="customer-total-label">Total</div>
-              <div className="customer-total-value">{kip(billTotal)}</div>
-            </div>
-          </div>
-
-          {!loaded ? (
-            <div className="customer-message">
-              Loading bill...
-            </div>
-          ) : !customerSession ? (
-            <div className="customer-message">
-              This QR bill is closed or no longer available.
-            </div>
-          ) : (
-            <div className="customer-grid">
-              <div className="customer-menu-grid">
-                {menu.filter((item) => item.ok).map((item) => (
-                  <button
-                    key={item.id}
-                    className="customer-menu-card"
-                    disabled={waitingPayment}
-                    onClick={() => addItem(customerSession.id, item.id)}
-                  >
-                    <div className="customer-menu-emoji">{item.emoji}</div>
-                    <div className="customer-menu-name">{item.name}</div>
-                    <div className="customer-menu-en">{item.en}</div>
-                    <div className="customer-menu-price">{kip(item.price)}</div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="customer-bill-card">
-                <div className="customer-bill-title">Your bill</div>
-                {customerSession.items.length === 0 ? (
-                  <div className="customer-empty">No items yet.</div>
-                ) : (
-                  customerSession.items.map((item) => {
-                    const menuItem = menu.find((entry) => entry.id === item.id);
-                    if (!menuItem) return null;
-
-                    return (
-                      <div key={item.id} className="customer-bill-row">
-                        <div className="customer-bill-item">
-                          <div className="customer-bill-name">{menuItem.name}</div>
-                          <div className="customer-bill-price">{kip(menuItem.price)}</div>
-                        </div>
-                        <button className="customer-qty-btn customer-qty-btn--minus" disabled={waitingPayment} onClick={() => rmItem(customerSession.id, item.id)}>-</button>
-                        <span className="customer-qty">{item.qty}</span>
-                        <button className="customer-qty-btn customer-qty-btn--plus" disabled={waitingPayment} onClick={() => addItem(customerSession.id, item.id)}>+</button>
-                      </div>
-                    );
-                  })
-                )}
-
-                {waitingPayment ? (
-                  <div className="customer-waiting">
-                    Waiting for staff confirmation
-                  </div>
-                ) : (
-                  <button
-                    className="customer-payment-btn"
-                    onClick={() => requestPayment(customerSession.id)}
-                    disabled={customerSession.items.length === 0}
-                  >
-                    Request payment
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      <CustomerPage
+        billId={billId ?? "Menu"}
+        loaded={loaded}
+        session={customerSession ?? null}
+        menu={menu}
+        categories={categories}
+        addItem={addItem}
+        rmItem={rmItem}
+        requestPayment={requestPayment}
+      />
     );
   }
 
@@ -1128,39 +1325,68 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <div className="app-sidebar">
-        <div className="app-logo">
-          <ChefHat size={20} color={C.gold} />
-        </div>
-        {navItems.map((n) => (
+      {sidebarHidden ? (
+        <button
+          type="button"
+          className="app-sidebar-pop"
+          onClick={() => {
+            setSidebarHidden(false);
+            setSidebarWidth(Math.max(sidebarWidth, 66));
+          }}
+          aria-label="Show sidebar"
+        >
+          <ChefHat size={18} />
+        </button>
+      ) : (
+        <div
+          className={`app-sidebar ${sidebarWidth >= 112 ? "app-sidebar--expanded" : ""}`}
+          style={{ width: sidebarWidth }}
+        >
+          <div className="app-logo">
+            <ChefHat size={20} color={C.gold} />
+          </div>
+          {navItems.map((n) => (
+            <NavBtn
+              key={n.id}
+              icon={n.icon}
+              label={n.label}
+              active={view === n.id}
+              expanded={sidebarWidth >= 112}
+              onClick={() => {
+                setView(n.id);
+                setSearchTerm("");
+                setShowSearchSuggestions(false);
+                setSearchSuggestionsClosing(false);
+                setShowNotifications(false);
+                setSelSession(null);
+                setShowAddItems(false);
+              }}
+            />
+          ))}
+          <div className="app-sidebar-spacer" />
+          <div className={`app-sync ${loaded ? "app-sync--saved" : "app-sync--loading"}`}>
+            {loaded ? "● saved" : "● ..."}
+          </div>
           <NavBtn
-            key={n.id}
-            icon={n.icon}
-            label={n.label}
-            active={view === n.id}
-            onClick={() => {
-              setView(n.id);
-              setSelSession(null);
-              setShowAddItems(false);
-            }}
+            icon={Settings}
+            label="ຕັ້ງຄ່າ"
+            active={false}
+            expanded={sidebarWidth >= 112}
+            onClick={() => {}}
           />
-        ))}
-        <div className="app-sidebar-spacer" />
-        <div className={`app-sync ${loaded ? "app-sync--saved" : "app-sync--loading"}`}>
-          {loaded ? "● saved" : "● ..."}
+          <NavBtn icon={LogOut} label="ອອກ" active={false} expanded={sidebarWidth >= 112} onClick={logout} />
+          <button
+            type="button"
+            className="app-sidebar-resize"
+            onPointerDown={startSidebarResize}
+            aria-label="Resize sidebar"
+          />
         </div>
-        <NavBtn
-          icon={Settings}
-          label="ຕັ້ງຄ່າ"
-          active={false}
-          onClick={() => {}}
-        />
-        <NavBtn icon={LogOut} label="ອອກ" active={false} onClick={logout} />
-      </div>
+      )}
 
       <div className="app-main">
         <div className="app-header">
-          <div>
+          <div className="app-header-titleblock">
             <div className="app-kicker">
               ໂອເລ້ເຂົ້າຊອຍ ຫຼວງພະບາງ
             </div>
@@ -1168,14 +1394,112 @@ export default function App() {
               {titles[view]}
             </div>
           </div>
-          <div className="app-header-actions">
+          <div className="app-header-searchslot">
             <div className="app-search">
-              <Search size={13} color={C.textDim} />
-              <span className="app-search-text">ຄົ້ນຫາ...</span>
+            <Search size={13} color={C.textDim} />
+            <input
+              className="app-search-input"
+              value={searchTerm}
+              onFocus={() => {
+                setSearchSuggestionsClosing(false);
+                setShowSearchSuggestions(true);
+              }}
+              onBlur={closeSearchSuggestions}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setSearchSuggestionsClosing(false);
+                setShowSearchSuggestions(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && normalizedSearch) {
+                  closeSearchSuggestions();
+                }
+              }}
+              placeholder="ຄົ້ນຫາ..."
+            />
+            {showSearchSuggestions && normalizedSearch && (
+              <div className={`app-search-suggestions ${searchSuggestionsClosing ? "app-search-suggestions--closing" : ""}`}>
+                {searchSuggestions.length === 0 ? (
+                  <div className="app-search-suggestion-empty">No matches</div>
+                ) : (
+                  searchSuggestions.map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className="app-search-suggestion"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setView(item.view);
+                        setSearchTerm(item.title);
+                        setShowSearchSuggestions(false);
+                        setSearchSuggestionsClosing(false);
+                        setSelSession(null);
+                        setShowAddItems(false);
+                      }}
+                    >
+                      <span>{item.title}</span>
+                      <small>
+                        <strong>{item.page}</strong>
+                        <em>{item.detail}</em>
+                      </small>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
             </div>
+          </div>
+          <div className="app-header-actions">
             <div className="app-notification">
-              <Bell size={17} color={C.textMid} />
-              <div className="app-notification-dot" />
+              <button
+                type="button"
+                className="app-notification-button"
+                onClick={() => setShowNotifications((current) => !current)}
+                aria-label="Notifications"
+              >
+                <Bell size={17} color={C.textMid} />
+                {notificationItems.length > 0 && (
+                  <div className="app-notification-dot" />
+                )}
+              </button>
+              {showNotifications && (
+                <div className="app-notification-panel">
+                  <div className="app-notification-header">
+                    <span>Notifications</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClearedNotificationIds((current) =>
+                          Array.from(new Set([...current, ...notificationItems.map((item) => item.id)])),
+                        );
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="app-notification-list">
+                    {notificationItems.length === 0 ? (
+                      <div className="app-notification-empty">No notifications</div>
+                    ) : (
+                      notificationItems.map((item) => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          className="app-notification-item"
+                          onClick={() => {
+                            setView(item.view);
+                            setSearchTerm("");
+                            setShowNotifications(false);
+                          }}
+                        >
+                          <span>{item.title}</span>
+                          <small>{item.detail}</small>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="app-user">
               <div className="app-user-name">{currentUser.name}</div>
@@ -1189,12 +1513,13 @@ export default function App() {
 
         <div className={`app-content ${view === "pos" ? "app-content--pos" : ""}`}>
           {view === "dashboard" && (
-            <Dashboard sales={sales} sessions={sessions} menu={menu} />
+            <Dashboard sales={searchedSales} sessions={searchedSessions} menu={searchedMenu} />
           )}
           {view === "pos" && (
             <POS
-              sessions={sessions}
+              sessions={searchedSessions}
               menu={menu}
+              addMenu={searchedMenu}
               selectedSessionId={selSession}
               setSelectedSessionId={setSelSession}
               showAddItems={showAddItems}
@@ -1210,7 +1535,7 @@ export default function App() {
           )}
           {view === "billing" && (
             <BillingView
-              sessions={sessions}
+              sessions={searchedSessions}
               menu={menu}
               setModal={setModal}
               requestPayment={requestPayment}
@@ -1220,7 +1545,7 @@ export default function App() {
           )}
           {view === "menu" && (
             <MenuView
-              menu={menu}
+              menu={searchedMenu}
               recipes={recipes}
               categories={categories}
               activeCat={activeCat}
@@ -1232,7 +1557,7 @@ export default function App() {
           )}
           {view === "stock" && (
             <StockView
-              stock={stock}
+              stock={searchedStock}
               stockFilter={stockFilter}
               setStockFilter={setStockFilter}
               setModal={setModal}
@@ -1241,7 +1566,12 @@ export default function App() {
           )}
           {view === "reports" && (
             <ReportsView
-              sales={sales}
+              sales={searchedSales}
+              menu={searchedMenu}
+              recipes={recipes}
+              ingredients={searchedIngredients}
+              staff={searchedStaff}
+              sessions={searchedSessions}
               revenueTotal={revenueTotal}
               activeBillsCount={activeBillsCount}
               pendingBillsCount={pendingBillsCount}
@@ -1249,7 +1579,7 @@ export default function App() {
           )}
           {view === "staff" && (
             <StaffView
-              staff={staff}
+              staff={searchedStaff}
               isAdmin={isAdmin}
               setModal={setModal}
               deleteStaff={deleteStaff}
@@ -1268,6 +1598,12 @@ export default function App() {
           addMenuRecipeRow={addMenuRecipeRow}
           setMenuRecipeField={setMenuRecipeField}
           removeMenuRecipeRow={removeMenuRecipeRow}
+          addMenuOptionGroup={addMenuOptionGroup}
+          setMenuOptionGroupField={setMenuOptionGroupField}
+          removeMenuOptionGroup={removeMenuOptionGroup}
+          addMenuOptionValue={addMenuOptionValue}
+          setMenuOptionValueField={setMenuOptionValueField}
+          removeMenuOptionValue={removeMenuOptionValue}
           submitMenu={submitMenu}
         />
       )}
@@ -1326,17 +1662,36 @@ export default function App() {
         <QrDisplayModal modal={modal} onClose={() => setModal(null)} />
       )}
 
+      {latestErrorToast && (
+        <div className="error-popup-layer">
+          <div className="error-popup-card">
+            <div className="error-popup-icon">
+              <AlertTriangle size={24} />
+            </div>
+            <div className="error-popup-title">Error</div>
+            <div className="error-popup-message">{latestErrorToast.msg}</div>
+            <button
+              type="button"
+              className="error-popup-button"
+              onClick={() =>
+                setToasts((current) =>
+                  current.filter((toastItem) => toastItem.id !== latestErrorToast.id),
+                )
+              }
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="toast-stack">
-        {toasts.map((t) => (
+        {toasts.filter((t) => t.type !== "error").map((t) => (
           <div
             key={t.id}
             className="toast-item"
           >
-            {t.type === "error" ? (
-              <AlertTriangle size={15} color={C.red} />
-            ) : (
-              <CheckCircle size={15} color={C.green} />
-            )}
+            <CheckCircle size={15} color={C.green} />
             <span className="toast-text">{t.msg}</span>
           </div>
         ))}

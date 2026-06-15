@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, TableItem, OrderItem } from "../types";
+import type { IngredientItem, MenuItem, MenuOptionGroup, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, TableItem, OrderItem } from "../types";
 import { now, today } from "../config/constants";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000/api";
@@ -41,6 +41,8 @@ type MenuRow = {
   availability: number | boolean | null;
   categoryName?: string | null;
   category_name?: string | null;
+  optionGroups?: MenuOptionGroup[];
+  option_groups?: MenuOptionGroup[];
 };
 
 type CategoryRow = {
@@ -185,6 +187,7 @@ type MenuCreateInput = {
   sold?: number;
   categoryId?: number | null;
   image?: string | null;
+  optionGroups?: MenuOptionGroup[];
 };
 
 type StaffCreateInput = {
@@ -363,6 +366,7 @@ const normalizeMenu = (row: MenuRow): MenuItem => ({
   emoji: row.menuImage ? "🖼️" : "🍜",
   categoryId: row.categoryId ?? row.category_id ?? null,
   image: row.menuImage ?? row.menu_image ?? null,
+  optionGroups: row.optionGroups ?? row.option_groups ?? [],
 });
 
 const normalizeStaff = (row: StaffRow): StaffItem => ({
@@ -485,6 +489,17 @@ const createMenuPayload = (data: MenuCreateInput) => ({
   category_id: data.categoryId ?? null,
   price: Number(data.price),
   availability: data.ok ? 1 : 0,
+  option_groups: (data.optionGroups ?? []).map((group) => ({
+    id: group.id,
+    name: group.name,
+    selectionType: group.selectionType,
+    required: Boolean(group.required),
+    values: (group.values ?? []).map((value) => ({
+      id: value.id,
+      name: value.name,
+      priceDelta: Number(value.priceDelta || 0),
+    })),
+  })),
 });
 
 const createStaffPayload = (data: StaffCreateInput) => {
@@ -555,6 +570,7 @@ export const apiClient = {
       sold: data.sold,
       categoryId: data.categoryId ?? null,
       image: data.image ?? null,
+      optionGroups: data.optionGroups ?? [],
     })),
     delete: (id: number) => API.delete(`/menus/${id}`),
   },

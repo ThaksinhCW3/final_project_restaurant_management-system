@@ -1,9 +1,10 @@
-import { ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon } from "lucide-react";
+import { Download, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon } from "lucide-react";
+import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Btn } from "../components/SharedUI";
-import { BILL_URL, C, CHART_DATA, PIE_DATA } from "../config/constants";
+import { BILL_URL, C } from "../config/constants";
 import type { AppModalState } from "../types/app";
-import type { MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem } from "../types";
+import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem } from "../types";
 
 type DispatchModal = Dispatch<SetStateAction<AppModalState>>;
 
@@ -156,6 +157,7 @@ export function MenuView({
                   originalImage: "",
                   ok: true,
                   recipeItems: [],
+                  optionGroups: [],
                 },
               })
             }
@@ -221,7 +223,7 @@ export function MenuView({
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="menu-action-btn" onClick={() => toggleOk(item.id)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text }}>{item.ok ? "ປິດ" : "ເປີດ"}</button>
-                <button className="menu-action-btn" onClick={() => setModal({ type: "menu-form", title: "ແກ້ໄຂເມນູ", data: { ...item, price: String(item.price), image: item.image ?? "", originalImage: item.image ?? "", recipeItems: recipes.filter((recipe) => recipe.menuId === item.id).map((recipe) => ({ id: recipe.id, ingredientId: recipe.ingredientId, quantityUsed: String(recipe.quantityUsed) })) } })} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><Pencil size={14} /> ແກ້ໄຂ</button>
+                <button className="menu-action-btn" onClick={() => setModal({ type: "menu-form", title: "ແກ້ໄຂເມນູ", data: { ...item, price: String(item.price), image: item.image ?? "", originalImage: item.image ?? "", optionGroups: item.optionGroups ?? [], recipeItems: recipes.filter((recipe) => recipe.menuId === item.id).map((recipe) => ({ id: recipe.id, ingredientId: recipe.ingredientId, quantityUsed: String(recipe.quantityUsed) })) } })} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><Pencil size={14} /> ແກ້ໄຂ</button>
                 <button className="menu-action-btn menu-delete-btn" onClick={() => deleteMenu(item.id, item.name)} style={{ width: 38, background: "rgba(208,64,48,0.12)", border: "1px solid rgba(208,64,48,0.3)", borderRadius: 10, color: C.red || "red", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={14} /></button>
               </div>
             </div>
@@ -299,23 +301,243 @@ export function StockView({
 
 export function ReportsView({
   sales,
+  menu,
+  recipes,
+  ingredients,
+  staff,
+  sessions,
   revenueTotal,
   activeBillsCount,
   pendingBillsCount,
 }: {
   sales: SaleItem[];
+  menu: MenuItem[];
+  recipes: RecipeItem[];
+  ingredients: IngredientItem[];
+  staff: StaffItem[];
+  sessions: SessionItem[];
   revenueTotal: number;
   activeBillsCount: number;
   pendingBillsCount: number;
 }) {
+  const [selectedReport, setSelectedReport] = useState("sales");
+  const menuQty = new Map<number, number>();
+  menu.forEach((item) => {
+    if (item.sold > 0) menuQty.set(item.id, item.sold);
+  });
+  sessions.forEach((session) => {
+    session.items.forEach((item) => {
+      menuQty.set(item.id, (menuQty.get(item.id) ?? 0) + item.qty);
+    });
+  });
+
+  const recipeCostByMenu = new Map<number, number>();
+  recipes.forEach((recipe) => {
+    const ingredient = ingredients.find((item) => item.id === recipe.ingredientId);
+    const cost = recipe.quantityUsed * (ingredient?.costPerUnit ?? 0);
+    recipeCostByMenu.set(recipe.menuId, (recipeCostByMenu.get(recipe.menuId) ?? 0) + cost);
+  });
+
+  const saleRows = sales.map((sale) => ({
+    Bill: sale.table,
+    Items: sale.items,
+    Total: sale.total,
+    Date: sale.date,
+    Time: sale.time,
+  }));
+
+  const bestSellingRows = menu
+    .map((item) => ({
+      Menu: item.name,
+      Category: item.cat,
+      Quantity: menuQty.get(item.id) ?? 0,
+      Revenue: (menuQty.get(item.id) ?? 0) * item.price,
+    }))
+    .sort((a, b) => b.Quantity - a.Quantity);
+
+  const profitRows = menu
+    .map((item) => {
+      const quantity = menuQty.get(item.id) ?? 0;
+      const revenue = quantity * item.price;
+      const cost = quantity * (recipeCostByMenu.get(item.id) ?? 0);
+      return {
+        Menu: item.name,
+        Quantity: quantity,
+        Revenue: revenue,
+        "Est. Ingredient Cost": cost,
+        "Est. Profit": revenue - cost,
+      };
+    })
+    .sort((a, b) => b["Est. Profit"] - a["Est. Profit"]);
+
+  const ingredientRows = ingredients.map((ingredient) => ({
+    Ingredient: ingredient.name,
+    Unit: ingredient.unit,
+    Stock: ingredient.stockQuantity,
+    Minimum: ingredient.minThreshold,
+    "Cost / Unit": ingredient.costPerUnit,
+    Status: ingredient.stockQuantity <= ingredient.minThreshold ? "Low" : "OK",
+  }));
+
+  const staffShiftRows = staff.map((member) => {
+    const active = sessions.filter((session) => session.staffId === member.id && session.status === "active").length;
+    const pending = sessions.filter((session) => session.staffId === member.id && session.status === "pending_payment").length;
+    return {
+      Staff: member.name,
+      Role: staffRoleLabel(member.role),
+      Username: member.username ?? member.since,
+      "Active Bills": active,
+      "Pending Bills": pending,
+      "Known Orders": member.orders,
+    };
+  });
+
+  const reportOptions = [
+    { id: "sales", title: "Sale report", rows: saleRows },
+    { id: "best-selling", title: "Best selling menu", rows: bestSellingRows },
+    { id: "profit", title: "Profit", rows: profitRows },
+    { id: "ingredients", title: "Ingredient in stock", rows: ingredientRows },
+    { id: "staff-shift", title: "Staff shift", rows: staffShiftRows },
+  ];
+  const activeReport = reportOptions.find((report) => report.id === selectedReport) ?? reportOptions[0];
+
+  const profitTotal = profitRows.reduce((sum, row) => sum + row["Est. Profit"], 0);
   const reportCards = [
     { label: "ລາຍຮັບລວມ", value: `${revenueTotal.toLocaleString("en")} ₭`, extra: "ຈາກບິນຈິງ", color: C.gold },
+    { label: "ກໍາໄລປະມານ", value: `${profitTotal.toLocaleString("en")} ₭`, extra: "ຈາກສູດວັດຖຸດິບ", color: C.green },
     { label: "QR Bill", value: `${activeBillsCount}`, extra: "ບິນ QR ທີ່ເປີດຢູ່", color: C.green },
     { label: "ລໍຖ້າຊໍາລະ", value: `${pendingBillsCount}`, extra: "ລໍພະນັກງານຢືນຢັນ", color: C.blue },
   ];
 
+  const escapeCell = (value: unknown) =>
+    String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+  const renderExportTable = (title: string, rows: Record<string, unknown>[]) => {
+    const headers = Object.keys(rows[0] ?? {});
+    return `
+      <h2>${escapeCell(title)}</h2>
+      <table>
+        <thead><tr>${headers.map((header) => `<th>${escapeCell(header)}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${rows.map((row) => `<tr>${headers.map((header) => `<td>${escapeCell(row[header])}</td>`).join("")}</tr>`).join("")}
+        </tbody>
+      </table>
+    `;
+  };
+
+  const exportSpreadsheet = () => {
+    const workbook = `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Arial, sans-serif; }
+            h2 { margin-top: 24px; }
+            table { border-collapse: collapse; margin-bottom: 18px; }
+            th, td { border: 1px solid #ddd; padding: 8px 10px; }
+            th { background: #f4f0f0; }
+          </style>
+        </head>
+        <body>
+          ${renderExportTable("Sale report", saleRows)}
+          ${renderExportTable("Best selling menu", bestSellingRows)}
+          ${renderExportTable("Profit", profitRows)}
+          ${renderExportTable("Ingredient in stock", ingredientRows)}
+          ${renderExportTable("Staff shift", staffShiftRows)}
+        </body>
+      </html>
+    `;
+    const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `restaurant-report-${new Date().toISOString().slice(0, 10)}.xls`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const ReportTable = ({
+    title,
+    rows,
+  }: {
+    title: string;
+    rows: Record<string, unknown>[];
+  }) => {
+    const headers = Object.keys(rows[0] ?? {});
+    return (
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflow: "hidden" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "16px 18px", borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{title}</div>
+          <div style={{ fontSize: 12, color: C.textDim }}>{rows.length} rows</div>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
+            <thead>
+              <tr>
+                {headers.map((header) => (
+                  <th key={header} style={{ padding: "13px 16px", color: C.textMid, fontSize: 11, textTransform: "uppercase", textAlign: "left", borderBottom: `1px solid ${C.border}`, background: C.card2 }}>
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIndex) => (
+                <tr key={`${title}-${rowIndex}`}>
+                  {headers.map((header) => (
+                    <td key={header} style={{ padding: "13px 16px", color: C.text, fontSize: 13, borderBottom: `1px solid ${C.border}` }}>
+                      {typeof row[header] === "number" ? Number(row[header]).toLocaleString("en") : String(row[header] ?? "")}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td style={{ padding: "16px", color: C.textDim, fontSize: 13 }} colSpan={Math.max(1, headers.length)}>
+                    No data
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ color: C.textMid, fontSize: 14 }}>ລາຍງານ</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <select
+            value={selectedReport}
+            onChange={(e) => setSelectedReport(e.target.value)}
+            style={{
+              minWidth: 210,
+              background: C.card,
+              border: `1px solid ${C.border}`,
+              borderRadius: 10,
+              padding: "10px 36px 10px 12px",
+              color: C.text,
+              cursor: "pointer",
+              outline: "none",
+              fontFamily: "var(--sans)",
+              fontSize: 13,
+            }}
+          >
+            {reportOptions.map((report) => (
+              <option key={report.id} value={report.id}>
+                {report.title}
+              </option>
+            ))}
+          </select>
+          <Btn onClick={exportSpreadsheet}><Download size={14} /> Export spreadsheet</Btn>
+        </div>
+      </div>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
         {reportCards.map((item) => (
           <div key={item.label} style={{ flex: 1, minWidth: 140, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
@@ -325,49 +547,7 @@ export function ReportsView({
           </div>
         ))}
       </div>
-      <div style={{ display: "flex", gap: 18 }}>
-        <div style={{ flex: 2, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 22 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 18 }}>ລາຍຮັບ 6 ວັນ</div>
-          <div style={{ display: "grid", gap: 12 }}>
-            {CHART_DATA.map((item) => (
-              <div key={item.day} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 28, fontSize: 11, color: C.textMid }}>{item.day}</span>
-                <div style={{ flex: 1, height: 10, background: C.border, borderRadius: 999 }}>
-                  <div style={{ width: `${Math.min(100, (item.amt / 900000) * 100)}%`, height: "100%", background: C.gold }} />
-                </div>
-                <span style={{ width: 80, fontSize: 11, color: C.textDim, textAlign: "right" }}>{item.amt}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 22 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 18 }}>ສ່ວນລາຍຮັບ</div>
-          {PIE_DATA.map((e) => (
-            <div key={e.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: e.color }} />
-                <span style={{ fontSize: 11, color: C.textMid }}>{e.name}</span>
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{e.value}%</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, padding: 18 }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 16 }}>ປະຫວັດການຂາຍ</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 110px 90px 90px", gap: 12, fontSize: 11, color: C.textMid, textTransform: "uppercase", marginBottom: 10 }}>
-          <span>Bill</span><span>ລາຍການ</span><span>ຍອດ</span><span>ວັນທີ່</span><span>ເວລາ</span>
-        </div>
-        {sales.map((s) => (
-          <div key={s.id} style={{ display: "grid", gridTemplateColumns: "1fr 80px 110px 90px 90px", gap: 12, padding: "12px 0", borderTop: `1px solid ${C.border}` }}>
-            <span style={{ color: C.text }}>{s.table}</span>
-            <span style={{ color: C.textDim }}>{s.items} ລາຍການ</span>
-            <span style={{ color: C.gold, fontWeight: 600 }}>{s.total}</span>
-            <span style={{ color: C.textDim }}>{s.date}</span>
-            <span style={{ color: C.textDim }}>{s.time}</span>
-          </div>
-        ))}
-      </div>
+      <ReportTable title={activeReport.title} rows={activeReport.rows} />
     </div>
   );
 }

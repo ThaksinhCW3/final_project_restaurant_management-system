@@ -17,6 +17,12 @@ type Props = {
   addMenuRecipeRow: (ingredientId?: number | string) => void;
   setMenuRecipeField: (index: number, field: string, value: any) => void;
   removeMenuRecipeRow: (index: number) => void;
+  addMenuOptionGroup: () => void;
+  setMenuOptionGroupField: (groupIndex: number, field: string, value: any) => void;
+  removeMenuOptionGroup: (groupIndex: number) => void;
+  addMenuOptionValue: (groupIndex: number) => void;
+  setMenuOptionValueField: (groupIndex: number, valueIndex: number, field: string, value: any) => void;
+  removeMenuOptionValue: (groupIndex: number, valueIndex: number) => void;
   submitMenu: () => void;
 };
 
@@ -66,6 +72,12 @@ export default function MenuFormModal({
   addMenuRecipeRow,
   setMenuRecipeField,
   removeMenuRecipeRow,
+  addMenuOptionGroup,
+  setMenuOptionGroupField,
+  removeMenuOptionGroup,
+  addMenuOptionValue,
+  setMenuOptionValueField,
+  removeMenuOptionValue,
   submitMenu,
 }: Props) {
   const imageInputId = useId();
@@ -108,6 +120,17 @@ export default function MenuFormModal({
 
   const originalImage = modal.data.originalImage || modal.data.image || "";
   const canResetImage = Boolean(originalImage && modal.data.image && originalImage !== modal.data.image);
+  const selectedCategoryId = (() => {
+    if (modal.data.categoryId != null && modal.data.categoryId !== "") {
+      return String(modal.data.categoryId);
+    }
+    const currentCategory = categories.find((category) => {
+      const name = category.category_name ?? category.categoryName ?? category.name;
+      return name === modal.data.cat;
+    });
+    const id = currentCategory?.category_id ?? currentCategory?.id ?? currentCategory?.categoryId;
+    return id == null ? "" : String(id);
+  })();
 
   return (
     <Modal title={modal.title ?? "ເມນູ"} onClose={onClose} width={860}>
@@ -249,13 +272,99 @@ export default function MenuFormModal({
             <Inp label="ຊື່" value={modal.data.name} onChange={(e) => setField("name", e.target.value)} />
             <Inp label="ລາຄາ (₭)" value={modal.data.price} onChange={(e) => setField("price", e.target.value)} />
           </div>
-          <Sel label="ໝວດ" value={modal.data.cat} onChange={(e) => setField("cat", e.target.value)}>
-            {categories.map((c) => (
-              <option key={`${c.category_id || c.categoryId}-${c.category_name || c.categoryName || c.name}`} value={c.category_name || c.categoryName || c.name}>
-                {c.category_name || c.categoryName || c.name}
+          <Sel
+            label="ໝວດ"
+            value={selectedCategoryId}
+            onChange={(e) => {
+              const category = categories.find((c) => String(c.category_id ?? c.id ?? c.categoryId) === e.target.value);
+              setField("categoryId", e.target.value ? Number(e.target.value) : null);
+              setField("cat", category?.category_name ?? category?.categoryName ?? category?.name ?? "");
+            }}
+          >
+            {categories.map((c) => {
+              const categoryId = c.category_id ?? c.id ?? c.categoryId;
+              const categoryName = c.category_name ?? c.categoryName ?? c.name;
+              return (
+              <option key={`${categoryId}-${categoryName}`} value={categoryId}>
+                {categoryName}
               </option>
-            ))}
+              );
+            })}
           </Sel>
+
+          <div className="menu-options-panel">
+            <div className="menu-options-header">
+              <div>
+                <span>Option settings</span>
+                <small>ຕົວເລືອກເມນູ</small>
+              </div>
+              <button type="button" onClick={addMenuOptionGroup}>
+                <Plus size={14} /> ເພີ່ມ
+              </button>
+            </div>
+
+            <div className="menu-options-list">
+              {(modal.data.optionGroups ?? []).map((group: any, groupIndex: number) => (
+                <div className="menu-option-group" key={group.id ?? groupIndex}>
+                  <div className="menu-option-group-grid">
+                    <input
+                      value={group.name}
+                      onChange={(e) => setMenuOptionGroupField(groupIndex, "name", e.target.value)}
+                      placeholder="Option name e.g. Size"
+                    />
+                    <select
+                      value={group.selectionType ?? "single"}
+                      onChange={(e) => setMenuOptionGroupField(groupIndex, "selectionType", e.target.value)}
+                    >
+                      <option value="single">Single</option>
+                      <option value="multiple">Multiple</option>
+                    </select>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(group.required)}
+                        onChange={(e) => setMenuOptionGroupField(groupIndex, "required", e.target.checked)}
+                      />
+                      Required
+                    </label>
+                    <button type="button" onClick={() => removeMenuOptionGroup(groupIndex)}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+
+                  <div className="menu-option-values">
+                    {(group.values ?? []).map((value: any, valueIndex: number) => (
+                      <div className="menu-option-value-row" key={value.id ?? valueIndex}>
+                        <input
+                          value={value.name}
+                          onChange={(e) => setMenuOptionValueField(groupIndex, valueIndex, "name", e.target.value)}
+                          placeholder="Value e.g. Large"
+                        />
+                        <input
+                          type="number"
+                          value={value.priceDelta}
+                          onChange={(e) => setMenuOptionValueField(groupIndex, valueIndex, "priceDelta", e.target.value)}
+                          placeholder="+ ₭"
+                        />
+                        <button type="button" onClick={() => removeMenuOptionValue(groupIndex, valueIndex)}>
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                    <button type="button" className="menu-option-add-value" onClick={() => addMenuOptionValue(groupIndex)}>
+                      <Plus size={13} /> Add value
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {(modal.data.optionGroups ?? []).length === 0 && (
+                <div className="menu-options-empty">
+                  ຍັງບໍ່ມີ option
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>

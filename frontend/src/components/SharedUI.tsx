@@ -8,18 +8,34 @@ interface NavBtnProps {
   icon: LucideIcon;
   label: string;
   active: boolean;
+  expanded?: boolean;
   onClick: () => void;
 }
-export function NavBtn({ icon: Icon, label, active, onClick }: NavBtnProps) {
+export function NavBtn({ icon: Icon, label, active, expanded = false, onClick }: NavBtnProps) {
   return (
     <button onClick={onClick} style={{
-      display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+      display: "flex",
+      flexDirection: expanded ? "row" : "column",
+      alignItems: "center",
+      justifyContent: expanded ? "flex-start" : "center",
+      gap: expanded ? 10 : 4,
       background: active ? C.goldDim : "transparent",
       border: `1px solid ${active ? C.borderMid : "transparent"}`,
-      borderRadius: 12, padding: "10px 6px", cursor: "pointer",
+      borderRadius: 12,
+      padding: expanded ? "10px 12px" : "10px 6px",
+      cursor: "pointer",
       color: active ? C.gold : C.textDim, width: "100%", transition: "all 0.18s",
     }}>
-      <Icon size={17} /><span style={{ fontSize: 9, letterSpacing: 0.6 }}>{label}</span>
+      <Icon size={17} style={{ flexShrink: 0 }} />
+      <span style={{
+        fontSize: expanded ? 11 : 9,
+        letterSpacing: expanded ? 0 : 0.6,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}>
+        {label}
+      </span>
     </button>
   );
 }

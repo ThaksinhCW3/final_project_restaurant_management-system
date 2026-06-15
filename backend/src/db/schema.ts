@@ -63,6 +63,54 @@ export const menus = mysqlTable("menus", {
 	primaryKey({ columns: [table.menuId], name: "menus_menu_id"}),
 ]);
 
+export const attributeTypes = mysqlTable("attribute_types", {
+	attributeTypeId: int("attribute_type_id").autoincrement().notNull(),
+	typeName: varchar("type_name", { length: 100 }).notNull(),
+	selectionType: mysqlEnum("selection_type", ['single','multiple']).default('single').notNull(),
+	required: tinyint("required").default(0),
+},
+(table) => [
+	primaryKey({ columns: [table.attributeTypeId], name: "attribute_types_attribute_type_id"}),
+]);
+
+export const attributes = mysqlTable("attributes", {
+	attributeId: int("attribute_id").autoincrement().notNull(),
+	attributeTypeId: int("attribute_type_id").notNull(),
+	attributeName: varchar("attribute_name", { length: 100 }).notNull(),
+	priceDelta: decimal("price_delta", { precision: 10, scale: 2 }).default('0.00'),
+},
+(table) => [
+	index("attribute_type_id").on(table.attributeTypeId),
+	foreignKey({
+		columns: [table.attributeTypeId],
+		foreignColumns: [attributeTypes.attributeTypeId],
+		name: "attrs_type_fk",
+	}).onDelete("cascade"),
+	primaryKey({ columns: [table.attributeId], name: "attributes_attribute_id"}),
+]);
+
+export const menuAttributes = mysqlTable("menu_attributes", {
+	menuAttributeId: int("menu_attribute_id").autoincrement().notNull(),
+	menuId: int("menu_id").notNull(),
+	attributeId: int("attribute_id").notNull(),
+},
+(table) => [
+	index("menu_id").on(table.menuId),
+	index("attribute_id").on(table.attributeId),
+	foreignKey({
+		columns: [table.menuId],
+		foreignColumns: [menus.menuId],
+		name: "menu_attrs_menu_fk",
+	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.attributeId],
+		foreignColumns: [attributes.attributeId],
+		name: "menu_attrs_attr_fk",
+	}).onDelete("cascade"),
+	primaryKey({ columns: [table.menuAttributeId], name: "menu_attributes_menu_attribute_id"}),
+	unique("menu_attributes_menu_id_attribute_id_unique").on(table.menuId, table.attributeId),
+]);
+
 export const orderItems = mysqlTable("order_items", {
 	orderItemId: int("order_item_id").autoincrement().notNull(),
 	orderId: int("order_id").references(() => orders.orderId, { onDelete: "cascade" } ),
@@ -151,14 +199,24 @@ export const suppliers = mysqlTable("suppliers", {
 
 export const supplyOrderDetails = mysqlTable("supply_order_details", {
 	supplyOrderDetailId: int("supply_order_detail_id").autoincrement().notNull(),
-	supplyOrderId: int("supply_order_id").notNull().references(() => supplyOrders.supplyOrderId, { onDelete: "cascade" } ),
-	ingredientId: int("ingredient_id").notNull().references(() => ingredients.ingredientId),
+	supplyOrderId: int("supply_order_id").notNull(),
+	ingredientId: int("ingredient_id").notNull(),
 	quantity: decimal({ precision: 10, scale: 2 }).notNull(),
 	unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
 },
 (table) => [
 	index("ingredient_id").on(table.ingredientId),
 	index("supplier_order_id").on(table.supplyOrderId),
+	foreignKey({
+		columns: [table.supplyOrderId],
+		foreignColumns: [supplyOrders.supplyOrderId],
+		name: "sod_order_fk",
+	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.ingredientId],
+		foreignColumns: [ingredients.ingredientId],
+		name: "sod_ingredient_fk",
+	}),
 	primaryKey({ columns: [table.supplyOrderDetailId], name: "supply_order_details_supply_order_detail_id"}),
 ]);
 
