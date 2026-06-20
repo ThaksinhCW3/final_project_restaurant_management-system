@@ -55,6 +55,8 @@ app.use('/api/orders', orderRoute);
 app.use('/api/order-items', orderItemRoute);
 app.use('/api/sales', salesRoute);
 app.use('/api/service-sessions', serviceSessionRoute);
+app.use('/api/supply-orders', supplierOrderRoute);
+app.use('/api/supply-order-details', supplierOrderDetailRoute);
 app.use('/api/supplier-orders', supplierOrderRoute);
 app.use('/api/supplier-order-details', supplierOrderDetailRoute);
 app.use('/api/tables', tableRoute);

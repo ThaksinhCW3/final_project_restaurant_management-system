@@ -60,7 +60,7 @@ const createTables = async (db) => {
     CREATE TABLE IF NOT EXISTS ingredients (
       ingredient_id INT AUTO_INCREMENT PRIMARY KEY,
       ingredient_name VARCHAR(150) NOT NULL,
-      ingredient_image VARCHAR(255),
+      ingredient_image LONGTEXT,
       stock_quantity DECIMAL(10,2) DEFAULT 0.00,
       unit VARCHAR(20),
       cost_per_unit DECIMAL(10,2) DEFAULT 0.00,
@@ -73,7 +73,7 @@ const createTables = async (db) => {
     CREATE TABLE IF NOT EXISTS menus (
       menu_id INT AUTO_INCREMENT PRIMARY KEY,
       menu_name VARCHAR(150) NOT NULL,
-      menu_image VARCHAR(255),
+      menu_image LONGTEXT,
       category_id INT NULL,
       price DECIMAL(10,2) NOT NULL,
       availability TINYINT DEFAULT 1
@@ -91,10 +91,21 @@ const createTables = async (db) => {
   `);
 
   await db.query(`
+    CREATE TABLE IF NOT EXISTS tables (
+      table_id INT AUTO_INCREMENT PRIMARY KEY,
+      table_number INT NOT NULL UNIQUE,
+      capacity INT DEFAULT 4,
+      status VARCHAR(30) DEFAULT 'available',
+      zone VARCHAR(50)
+    )
+  `);
+
+  await db.query(`
     CREATE TABLE IF NOT EXISTS service_sessions (
       session_id INT AUTO_INCREMENT PRIMARY KEY,
       session_type VARCHAR(30) DEFAULT 'dine-in',
       note VARCHAR(255),
+      table_id INT NULL,
       table_number INT NULL,
       staff_id INT NULL,
       started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -132,8 +143,8 @@ const createTables = async (db) => {
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS suppliers_orders (
-      supplier_order_id INT AUTO_INCREMENT PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS supply_orders (
+      supply_order_id INT AUTO_INCREMENT PRIMARY KEY,
       supplier_id INT NULL,
       staff_id INT NULL,
       order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -143,9 +154,9 @@ const createTables = async (db) => {
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS supplier_order_details (
-      supplier_order_detail_id INT AUTO_INCREMENT PRIMARY KEY,
-      supplier_order_id INT NULL,
+    CREATE TABLE IF NOT EXISTS supply_order_details (
+      supply_order_detail_id INT AUTO_INCREMENT PRIMARY KEY,
+      supply_order_id INT NULL,
       ingredient_id INT NULL,
       quantity DECIMAL(10,2) NOT NULL,
       unit_price DECIMAL(10,2) NOT NULL
@@ -157,6 +168,7 @@ const createTables = async (db) => {
       import_id INT AUTO_INCREMENT PRIMARY KEY,
       supplier_order_id INT NULL,
       import_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      received_by INT NULL,
       remark TEXT
     )
   `);
@@ -192,6 +204,10 @@ const ensureColumn = async (db, table, column, definition) => {
 
 const updateExistingTables = async (db) => {
   await ensureColumn(db, "service_sessions", "note", "VARCHAR(255) NULL");
+  await ensureColumn(db, "service_sessions", "table_id", "INT NULL");
+  await ensureColumn(db, "imports", "received_by", "INT NULL");
+  await db.query("ALTER TABLE menus MODIFY menu_image LONGTEXT NULL");
+  await db.query("ALTER TABLE ingredients MODIFY ingredient_image LONGTEXT NULL");
 };
 
 const seedData = async (db) => {
@@ -257,14 +273,29 @@ const seedData = async (db) => {
       (9, 7, 1.00, 'pcs')
   `);
 
+  await seedIfEmpty(db, "tables", `
+    INSERT INTO tables (table_id, table_number, capacity, status, zone) VALUES
+      (1, 1, 4, 'occupied', 'main'),
+      (2, 2, 4, 'occupied', 'main'),
+      (3, 3, 4, 'occupied', 'main'),
+      (4, 4, 4, 'available', 'main'),
+      (5, 5, 4, 'available', 'main'),
+      (6, 6, 4, 'available', 'main'),
+      (7, 7, 5, 'available', 'main'),
+      (8, 8, 4, 'available', 'main'),
+      (9, 9, 4, 'available', 'main'),
+      (10, 10, 4, 'available', 'main'),
+      (11, 11, 4, 'available', 'main')
+  `);
+
   await seedIfEmpty(db, "service_sessions", `
     INSERT INTO service_sessions
-      (session_id, session_type, table_number, staff_id, started_at, ended_at, status)
+      (session_id, session_type, table_id, table_number, staff_id, started_at, ended_at, status)
     VALUES
-      (1, 'dine-in', 1, 1, '2026-06-12 10:32:00', NULL, 'Active'),
-      (2, 'dine-in', 2, 1, '2026-06-12 11:05:00', NULL, 'Active'),
-      (3, 'dine-in', 5, 2, '2026-06-12 09:48:00', NULL, 'Active'),
-      (4, 'takeaway', NULL, 1, '2026-06-12 08:30:00', '2026-06-12 08:55:00', 'Completed')
+      (1, 'dine-in', 1, 1, 1, '2026-06-12 10:32:00', NULL, 'Active'),
+      (2, 'dine-in', 2, 2, 1, '2026-06-12 11:05:00', NULL, 'Active'),
+      (3, 'dine-in', 5, 5, 2, '2026-06-12 09:48:00', NULL, 'Active'),
+      (4, 'takeaway', NULL, NULL, 1, '2026-06-12 08:30:00', '2026-06-12 08:55:00', 'Completed')
   `);
 
   await seedIfEmpty(db, "orders", `

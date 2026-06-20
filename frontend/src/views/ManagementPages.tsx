@@ -1,14 +1,21 @@
-import { Download, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon } from "lucide-react";
+import { Check, Download, ExternalLink, Plus, Pencil, Printer, Trash2, Truck, Image as ImageIcon } from "lucide-react";
 import { useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
+import type { CSSProperties, Dispatch, SetStateAction } from "react";
 import { Btn } from "../components/SharedUI";
-import { BILL_URL, C } from "../config/constants";
+import { BILL_URL, C, kip } from "../config/constants";
 import type { AppModalState } from "../types/app";
-import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem } from "../types";
+import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, SupplyOrderDetailItem, SupplyOrderItem } from "../types";
+import { printOrderBill } from "../utils/printOrderBill";
+import { printSupplyOrderBill } from "../utils/printSupplyOrderBill";
 
 type DispatchModal = Dispatch<SetStateAction<AppModalState>>;
 
-const staffRoleLabel = (role: string) => (role === "manager" ? "Admin" : "Staff");
+const staffRoleLabel = (role: string) => (role === "manager" ? "ຜູ້ຈັດການ" : "ພະນັກງານ");
+const sessionTypeLabel = (value?: string | null) => {
+  if (value === "dine-in") return "ທານທີ່ຮ້ານ";
+  if (value === "takeaway") return "ກັບບ້ານ";
+  return value || "—";
+};
 
 export function BillingView({
   sessions,
@@ -37,12 +44,12 @@ export function BillingView({
           onClick={() =>
             setModal({
               type: "session-form",
-              title: "ເພີ່ມ Bill",
+              title: "ເພີ່ມບິນ",
               data: { sessionType: "dine-in", tableNumber: "", staffId: "" },
             })
           }
         >
-          <Plus size={14} /> ເພີ່ມ Bill
+          <Plus size={14} /> ເພີ່ມບິນ
         </Btn>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
@@ -57,19 +64,20 @@ export function BillingView({
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{s.id}</div>
-                  <div style={{ fontSize: 11, color: C.textDim }}>{s.createdAt} · {s.payMethod} · {s.note}</div>
+                  <div style={{ fontSize: 11, color: C.textDim }}>{s.createdAt} · {sessionTypeLabel(s.payMethod || s.sessionType)} · {s.note}</div>
                 </div>
                 <div style={{ fontSize: 12, color: pending ? C.red : C.green, padding: "6px 10px", borderRadius: 999, background: pending ? "rgba(183,28,28,0.12)" : "rgba(74,140,69,0.12)" }}>
                   {pending ? "ລໍຖ້າຊໍາລະ" : "ເປີດ"}
                 </div>
               </div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: C.gold }}>{total.toLocaleString("en")} ₭</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.gold }}>{kip(total)}</div>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", color: C.textDim, fontSize: 12 }}>
                 <span>{s.note}</span>
                 <span>{s.items.length} ລາຍການ</span>
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <Btn variant="secondary" onClick={() => openCustomerView(s.id)}><ExternalLink size={14} /> View</Btn>
+                <Btn variant="secondary" onClick={() => openCustomerView(s.id)}><ExternalLink size={14} /> ເບິ່ງ</Btn>
+                <Btn variant="secondary" onClick={() => printOrderBill(s, menu)}><Printer size={14} /> ພິມ</Btn>
                 {!pending && <Btn variant="secondary" onClick={() => requestPayment(s.id)}>ຂໍການຊໍາລະ</Btn>}
                 {pending && <Btn onClick={() => confirmPayment(s.id)}>ຊໍາລະ</Btn>}
                 <Btn variant="danger" onClick={() => cancelSession(s.id)}>ຍົກເລີກ</Btn>
@@ -106,21 +114,35 @@ export function MenuView({
   toggleOk: (id: number) => void;
   deleteMenu: (id: number, name: string) => void;
 }) {
+  const [menuStatusFilter, setMenuStatusFilter] = useState<"all" | "open" | "closed">("all");
   const categoryNames = Array.from(
     new Set(
-      [
-        ...categories.map((c) => c.category_name || c.categoryName || c.name),
-        ...menu.map((item) => item.cat),
-      ].filter(Boolean),
+      categories
+        .map((c) => c.category_name || c.categoryName || c.name)
+        .filter(Boolean),
     ),
   );
   const menuCategories = ["ທັງໝົດ", ...categoryNames];
   const selectedCategory = menuCategories.includes(activeCat)
     ? activeCat
     : "ທັງໝົດ";
-  const visibleMenu = menu.filter(
+  const categoryFilteredMenu = menu.filter(
     (item) => selectedCategory === "ທັງໝົດ" || item.cat === selectedCategory,
   );
+  const visibleMenu = categoryFilteredMenu.filter((item) => {
+    if (menuStatusFilter === "open") return item.ok;
+    if (menuStatusFilter === "closed") return !item.ok;
+    return true;
+  });
+  const categoryCounts = new Map<string, number>();
+  menu.forEach((item) => {
+    categoryCounts.set(item.cat, (categoryCounts.get(item.cat) ?? 0) + 1);
+  });
+  const statusFilters = [
+    { id: "all" as const, label: "ທັງໝົດ", count: categoryFilteredMenu.length, dot: C.green },
+    { id: "open" as const, label: "ເປີດ", count: categoryFilteredMenu.filter((item) => item.ok).length, dot: C.green },
+    { id: "closed" as const, label: "ປິດ", count: categoryFilteredMenu.filter((item) => !item.ok).length, dot: C.red },
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -131,13 +153,13 @@ export function MenuView({
             variant="secondary"
             onClick={() =>
               setModal({
-                type: "category-form",
-                title: "ເພີ່ມໝວດເມນູ",
-                data: { name: "" },
+                type: "category-manager",
+                title: "ໝວດເມນູ",
+                data: {},
               })
             }
           >
-            <Plus size={14} /> ເພີ່ມໝວດ
+            <Pencil size={14} /> ຕັ້ງຄ່າໝວດ
           </Btn>
           <Btn
             onClick={() =>
@@ -166,32 +188,90 @@ export function MenuView({
           </Btn>
         </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 10, color: C.textMid, fontSize: 12 }}>
-          <span style={{ textTransform: "uppercase", letterSpacing: 1.1 }}>ໝວດ</span>
-          <select
-            value={selectedCategory}
-            onChange={(e) => setActiveCat(e.target.value)}
-            style={{
-              minWidth: 180,
-              background: C.card,
-              border: `1px solid ${C.border}`,
-              borderRadius: 12,
-              padding: "10px 36px 10px 14px",
-              color: C.text,
-              cursor: "pointer",
-              outline: "none",
-              fontFamily: "var(--sans)",
-              fontSize: 13,
-            }}
-          >
-            {menuCategories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {menuCategories.map((category) => {
+              const selected = category === selectedCategory;
+              const count = category === "ທັງໝົດ" ? menu.length : categoryCounts.get(category) ?? 0;
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setActiveCat(category)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    minHeight: 34,
+                    borderRadius: 999,
+                    border: `1px solid ${selected ? "rgba(0,128,96,0.24)" : C.border}`,
+                    background: selected ? "#0b8f6f" : C.card,
+                    color: selected ? "#fff" : C.textMid,
+                    boxShadow: selected ? "0 6px 14px rgba(11,143,111,0.18)" : "0 3px 10px rgba(60,20,20,0.05)",
+                    padding: "7px 10px",
+                    cursor: "pointer",
+                    fontFamily: "var(--sans)",
+                    fontSize: 12,
+                    fontWeight: 650,
+                  }}
+                >
+                  {selected && <Check size={13} />}
+                  <span>{category}</span>
+                  <span
+                    style={{
+                      minWidth: 22,
+                      height: 20,
+                      borderRadius: 999,
+                      padding: "1px 7px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: selected ? "rgba(255,255,255,0.18)" : C.card2,
+                      color: selected ? "#fff" : C.textDim,
+                      fontSize: 11,
+                    }}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {statusFilters.map((filter) => {
+              const selected = filter.id === menuStatusFilter;
+              return (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => setMenuStatusFilter(filter.id)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 7,
+                    minHeight: 30,
+                    borderRadius: 999,
+                    border: `1px solid ${selected ? C.borderMid : C.border}`,
+                    background: selected ? C.goldDim : C.card,
+                    color: selected ? C.gold : C.textMid,
+                    padding: "6px 10px",
+                    cursor: "pointer",
+                    fontFamily: "var(--sans)",
+                    fontSize: 12,
+                    boxShadow: "0 3px 10px rgba(60,20,20,0.05)",
+                  }}
+                >
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: filter.dot }} />
+                  <span>{filter.label}</span>
+                  <span style={{ color: C.textDim, background: C.card2, borderRadius: 999, minWidth: 20, padding: "1px 6px", fontSize: 11 }}>
+                    {filter.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <span style={{ color: C.textDim, fontSize: 12 }}>
           {visibleMenu.length} ລາຍການ
         </span>
@@ -213,12 +293,11 @@ export function MenuView({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.text || "#000" }}>{item.name || "Missing Lao Name"}</div>
-                  <div style={{ fontSize: 11, color: C.textDim || "#666" }}>{item.en || "Missing English Name"}</div>
+                  <div style={{ fontSize: 11, color: C.textDim || "#666" }}>{item.cat || "ບໍ່ມີໝວດ"}</div>
                 </div>
-                <div style={{ fontSize: 18 }}>{item.emoji}</div>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: C.gold || "gold" }}>{item.price}</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: C.gold || "gold" }}>{kip(item.price)}</span>
                 <span style={{ fontSize: 11, color: item.ok ? C.green || "green" : C.textDim || "#666", padding: "4px 8px", borderRadius: 999, background: item.ok ? "rgba(74,140,69,0.12)" : "rgba(90,90,90,0.08)" }}>{item.ok ? "ເປີດ" : "ປິດ"}</span>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -236,45 +315,113 @@ export function MenuView({
 
 export function StockView({
   stock,
+  supplyOrders,
+  supplyOrderDetails,
   stockFilter,
   setStockFilter,
   setModal,
   deleteStock,
 }: {
   stock: StockItem[];
+  supplyOrders: SupplyOrderItem[];
+  supplyOrderDetails: SupplyOrderDetailItem[];
   stockFilter: string;
   setStockFilter: (value: string) => void;
   setModal: DispatchModal;
   deleteStock: (id: number, name: string) => void;
 }) {
+  const [stockTab, setStockTab] = useState<"ingredients" | "history">("ingredients");
+  const visibleStock = stock.filter((r) => stockFilter === "all" || r.cur <= r.min);
+  const lowStockCount = stock.filter((r) => r.cur <= r.min).length;
+  const chipStyle = (active: boolean): CSSProperties => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 13px",
+    borderRadius: 999,
+    border: `1px solid ${active ? "rgba(211,47,47,0.45)" : C.border}`,
+    background: active ? "rgba(211,47,47,0.10)" : C.card,
+    color: active ? C.red : C.text,
+    fontWeight: 700,
+    cursor: "pointer",
+    boxShadow: active ? "0 8px 18px rgba(211,47,47,0.08)" : "0 6px 16px rgba(35,10,10,0.04)",
+  });
+  const countStyle = (active: boolean): CSSProperties => ({
+    minWidth: 26,
+    height: 22,
+    padding: "0 8px",
+    borderRadius: 999,
+    background: active ? "#fff" : C.card2,
+    color: active ? C.red : C.textDim,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 12,
+    fontWeight: 800,
+  });
+  const dotStyle = (color: string): CSSProperties => ({
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: color,
+  });
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
         <div style={{ fontSize: 14, color: C.textMid }}>ຄັງສິນຄ້າ</div>
-        <Btn
-          onClick={() =>
-            setModal({
-              type: "stock-form",
-              title: "ເພີ່ມສິນຄ້າ",
-              data: { name: "", image: "", unit: "kg", cur: "", min: "" },
-            })
-          }
-        >
-          <Plus size={14} /> ເພີ່ມສິນຄ້າ
-        </Btn>
-      </div>
-      <div style={{ display: "flex", gap: 10 }}>
-        <button onClick={() => setStockFilter("all")} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${stockFilter === "all" ? C.gold : C.border}`, background: stockFilter === "all" ? C.goldDim : C.card }}>ທັງໝົດ</button>
-        <button onClick={() => setStockFilter("low")} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${stockFilter === "low" ? C.gold : C.border}`, background: stockFilter === "low" ? C.goldDim : C.card }}>ຕ່ຳ</button>
-      </div>
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "64px 1fr 80px 70px 80px 1fr", padding: "14px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase" }}>
-          <span>ຮູບ</span><span>ສິນຄ້າ</span><span>ຫົວໜ່ວຍ</span><span>ຈຳນວນ</span><span>ຫຼັກ</span><span>ການຈັດການ</span>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Btn
+            variant="secondary"
+            onClick={() =>
+              setModal({
+                type: "supplier-manager",
+                title: "ຜູ້ສະໜອງ",
+                data: { name: "", phone: "" },
+              })
+            }
+          >
+            <Truck size={14} /> ຜູ້ສະໜອງ
+          </Btn>
+          <Btn
+            onClick={() =>
+              setModal({
+                type: "stock-form",
+                title: "ເພີ່ມສິນຄ້າ",
+                data: { name: "", image: "", unit: "kg", cur: "", min: "", costPerUnit: "", supplierId: "" },
+              })
+            }
+          >
+            <Plus size={14} /> ເພີ່ມສິນຄ້າ
+          </Btn>
         </div>
-        {stock.filter((r) => stockFilter === "all" || r.cur <= r.min).map((r) => {
+      </div>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <button onClick={() => setStockTab("ingredients")} style={{ flex: 1, padding: "11px", borderRadius: 10, border: `1px solid ${stockTab === "ingredients" ? C.gold : C.border}`, background: stockTab === "ingredients" ? C.goldDim : C.card, color: stockTab === "ingredients" ? C.gold : C.text, fontWeight: 700, cursor: "pointer" }}>ວັດຖຸດິບ</button>
+        <button onClick={() => setStockTab("history")} style={{ flex: 1, padding: "11px", borderRadius: 10, border: `1px solid ${stockTab === "history" ? C.gold : C.border}`, background: stockTab === "history" ? C.goldDim : C.card, color: stockTab === "history" ? C.gold : C.text, fontWeight: 700, cursor: "pointer" }}>ປະຫວັດການນໍາເຂົ້າ</button>
+      </div>
+      {stockTab === "ingredients" && (
+        <>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button onClick={() => setStockFilter("all")} style={chipStyle(stockFilter === "all")}>
+              <span style={dotStyle(C.green)} />
+              <span>ທັງໝົດ</span>
+              <span style={countStyle(stockFilter === "all")}>{stock.length}</span>
+            </button>
+            <button onClick={() => setStockFilter("low")} style={chipStyle(stockFilter === "low")}>
+              <span style={dotStyle(C.red)} />
+              <span>ຕ່ຳ</span>
+              <span style={countStyle(stockFilter === "low")}>{lowStockCount}</span>
+            </button>
+          </div>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflowX: "auto", overflowY: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "64px 1fr 80px 70px 80px 120px 140px 1fr", padding: "14px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase", minWidth: 940 }}>
+          <span>ຮູບ</span><span>ສິນຄ້າ</span><span>ຫົວໜ່ວຍ</span><span>ຈຳນວນ</span><span>ຕ່ຳສຸດ</span><span>ຕົ້ນທຶນ</span><span>ຜູ້ສະໜອງ</span><span>ການຈັດການ</span>
+        </div>
+        {visibleStock.map((r) => {
           const low = r.cur <= r.min;
           return (
-            <div key={r.id} style={{ display: "grid", gridTemplateColumns: "64px 1fr 80px 70px 80px 1fr", padding: "14px 16px", borderTop: `1px solid ${C.border}`, alignItems: "center", gap: 10 }}>
+            <div key={r.id} style={{ display: "grid", gridTemplateColumns: "64px 1fr 80px 70px 80px 120px 140px 1fr", padding: "14px 16px", borderTop: `1px solid ${C.border}`, alignItems: "center", gap: 10, minWidth: 940 }}>
               <div style={{ width: 48, height: 48, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.border}`, background: C.card2, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {r.image ? (
                   <img src={r.image} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
@@ -286,15 +433,50 @@ export function StockView({
               <span style={{ fontSize: 12, color: C.textDim }}>{r.unit}</span>
               <span style={{ fontSize: 14, fontWeight: 600, color: low ? C.red : C.text }}>{r.cur}</span>
               <span style={{ fontSize: 12, color: C.textDim }}>{r.min}</span>
+              <span style={{ fontSize: 12, color: C.textDim }}>{kip(r.costPerUnit ?? 0)}</span>
+              <span style={{ fontSize: 12, color: C.textDim }}>{r.supplierName || "—"}</span>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => setModal({ type: "stock-receive", title: `ນໍາເຂົ້າ ${r.name}`, data: { ...r, qty: "" } })} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>ຮັບເຂົ້າ</button>
-                <button onClick={() => setModal({ type: "stock-form", title: "ແກ້ໄຂສິນຄ້າ", data: { ...r, image: r.image ?? "", cur: String(r.cur), min: String(r.min) } })} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>ແກ້ໄຂ</button>
+                <button onClick={() => setModal({ type: "stock-receive", title: `ນໍາເຂົ້າ ${r.name}`, data: { ...r, qty: "", costPrice: r.costPerUnit ? r.costPerUnit.toLocaleString("en-US") : "", supplierId: r.supplierId ?? "", remark: "" } })} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>ຮັບເຂົ້າ</button>
+                <button onClick={() => setModal({ type: "stock-form", title: "ແກ້ໄຂສິນຄ້າ", data: { ...r, image: r.image ?? "", cur: String(r.cur), min: String(r.min), costPerUnit: r.costPerUnit ? r.costPerUnit.toLocaleString("en-US") : "", supplierId: r.supplierId ?? "" } })} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>ແກ້ໄຂ</button>
                 <button onClick={() => deleteStock(r.id, r.name)} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid rgba(208,64,48,0.3)`, background: "rgba(208,64,48,0.08)", cursor: "pointer", color: C.red }}>ລຶບ</button>
               </div>
             </div>
           );
         })}
+          </div>
+        </>
+      )}
+      {stockTab === "history" && (
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflow: "hidden" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ color: C.textMid, fontSize: 13 }}>ປະຫວັດໃບສັ່ງຊື້</div>
+          <div style={{ color: C.textDim, fontSize: 12 }}>{supplyOrders.length} ໃບສັ່ງຊື້</div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 120px 110px 120px", minWidth: 760, padding: "12px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase", background: C.card2 }}>
+          <span>ໃບສັ່ງ</span><span>ຜູ້ສະໜອງ</span><span>ພະນັກງານ</span><span>ວັນທີ</span><span>ລວມ</span><span>ຈັດການ</span>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          {supplyOrders.map((order) => {
+            const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
+            return (
+              <div key={order.id} style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 120px 110px 120px", minWidth: 760, padding: "13px 16px", gap: 10, alignItems: "center", borderTop: `1px solid ${C.border}` }}>
+                <span style={{ color: C.text, fontWeight: 700 }}>#{order.id}</span>
+                <span style={{ color: C.text }}>{order.supplierName}</span>
+                <span style={{ color: C.textDim, fontSize: 12 }}>{order.staffName}</span>
+                <span style={{ color: C.textDim, fontSize: 12 }}>{order.orderDate ? new Date(order.orderDate).toLocaleDateString("en-US") : "—"}</span>
+                <span style={{ color: C.gold, fontWeight: 700 }}>{kip(order.totalAmount)}</span>
+                <Btn variant="secondary" onClick={() => printSupplyOrderBill(order, details)}>
+                  <Printer size={14} /> ພິມ
+                </Btn>
+              </div>
+            );
+          })}
+          {supplyOrders.length === 0 && (
+            <div style={{ padding: 18, color: C.textDim, fontSize: 13 }}>ຍັງບໍ່ມີໃບສັ່ງຊື້. ໃຊ້ “ຮັບເຂົ້າ” ໃນວັດຖຸດິບເພື່ອສ້າງ.</div>
+          )}
+        </div>
       </div>
+      )}
     </div>
   );
 }
@@ -339,21 +521,21 @@ export function ReportsView({
   });
 
   const saleRows = sales.map((sale) => ({
-    Bill: sale.table,
-    Items: sale.items,
-    Total: sale.total,
-    Date: sale.date,
-    Time: sale.time,
+    ບິນ: sale.table,
+    ລາຍການ: sale.items,
+    ລວມ: sale.total,
+    ວັນທີ: sale.date,
+    ເວລາ: sale.time,
   }));
 
   const bestSellingRows = menu
     .map((item) => ({
-      Menu: item.name,
-      Category: item.cat,
-      Quantity: menuQty.get(item.id) ?? 0,
-      Revenue: (menuQty.get(item.id) ?? 0) * item.price,
+      ເມນູ: item.name,
+      ໝວດ: item.cat,
+      ຈຳນວນ: menuQty.get(item.id) ?? 0,
+      ລາຍຮັບ: (menuQty.get(item.id) ?? 0) * item.price,
     }))
-    .sort((a, b) => b.Quantity - a.Quantity);
+    .sort((a, b) => b.ຈຳນວນ - a.ຈຳນວນ);
 
   const profitRows = menu
     .map((item) => {
@@ -361,51 +543,51 @@ export function ReportsView({
       const revenue = quantity * item.price;
       const cost = quantity * (recipeCostByMenu.get(item.id) ?? 0);
       return {
-        Menu: item.name,
-        Quantity: quantity,
-        Revenue: revenue,
-        "Est. Ingredient Cost": cost,
-        "Est. Profit": revenue - cost,
+        ເມນູ: item.name,
+        ຈຳນວນ: quantity,
+        ລາຍຮັບ: revenue,
+        "ຕົ້ນທຶນວັດຖຸດິບປະມານ": cost,
+        "ກໍາໄລປະມານ": revenue - cost,
       };
     })
-    .sort((a, b) => b["Est. Profit"] - a["Est. Profit"]);
+    .sort((a, b) => b["ກໍາໄລປະມານ"] - a["ກໍາໄລປະມານ"]);
 
   const ingredientRows = ingredients.map((ingredient) => ({
-    Ingredient: ingredient.name,
-    Unit: ingredient.unit,
-    Stock: ingredient.stockQuantity,
-    Minimum: ingredient.minThreshold,
-    "Cost / Unit": ingredient.costPerUnit,
-    Status: ingredient.stockQuantity <= ingredient.minThreshold ? "Low" : "OK",
+    ວັດຖຸດິບ: ingredient.name,
+    ຫົວໜ່ວຍ: ingredient.unit,
+    ຈຳນວນ: ingredient.stockQuantity,
+    ຕ່ຳສຸດ: ingredient.minThreshold,
+    "ຕົ້ນທຶນ/ຫົວໜ່ວຍ": ingredient.costPerUnit,
+    ສະຖານະ: ingredient.stockQuantity <= ingredient.minThreshold ? "ຕ່ຳ" : "ປົກກະຕິ",
   }));
 
   const staffShiftRows = staff.map((member) => {
     const active = sessions.filter((session) => session.staffId === member.id && session.status === "active").length;
     const pending = sessions.filter((session) => session.staffId === member.id && session.status === "pending_payment").length;
     return {
-      Staff: member.name,
-      Role: staffRoleLabel(member.role),
-      Username: member.username ?? member.since,
-      "Active Bills": active,
-      "Pending Bills": pending,
-      "Known Orders": member.orders,
+      ພະນັກງານ: member.name,
+      ຕໍາແໜ່ງ: staffRoleLabel(member.role),
+      ຊື່ຜູ້ໃຊ້: member.username ?? member.since,
+      "ບິນທີ່ເປີດ": active,
+      "ບິນລໍຖ້າຊໍາລະ": pending,
+      "ອໍເດີທີ່ຮູ້ຈັກ": member.orders,
     };
   });
 
   const reportOptions = [
-    { id: "sales", title: "Sale report", rows: saleRows },
-    { id: "best-selling", title: "Best selling menu", rows: bestSellingRows },
-    { id: "profit", title: "Profit", rows: profitRows },
-    { id: "ingredients", title: "Ingredient in stock", rows: ingredientRows },
-    { id: "staff-shift", title: "Staff shift", rows: staffShiftRows },
+    { id: "sales", title: "ລາຍງານການຂາຍ", rows: saleRows },
+    { id: "best-selling", title: "ເມນູຂາຍດີ", rows: bestSellingRows },
+    { id: "profit", title: "ກໍາໄລ", rows: profitRows },
+    { id: "ingredients", title: "ວັດຖຸດິບໃນຄັງ", rows: ingredientRows },
+    { id: "staff-shift", title: "ກະພະນັກງານ", rows: staffShiftRows },
   ];
   const activeReport = reportOptions.find((report) => report.id === selectedReport) ?? reportOptions[0];
 
-  const profitTotal = profitRows.reduce((sum, row) => sum + row["Est. Profit"], 0);
+  const profitTotal = profitRows.reduce((sum, row) => sum + row["ກໍາໄລປະມານ"], 0);
   const reportCards = [
-    { label: "ລາຍຮັບລວມ", value: `${revenueTotal.toLocaleString("en")} ₭`, extra: "ຈາກບິນຈິງ", color: C.gold },
-    { label: "ກໍາໄລປະມານ", value: `${profitTotal.toLocaleString("en")} ₭`, extra: "ຈາກສູດວັດຖຸດິບ", color: C.green },
-    { label: "QR Bill", value: `${activeBillsCount}`, extra: "ບິນ QR ທີ່ເປີດຢູ່", color: C.green },
+    { label: "ລາຍຮັບລວມ", value: kip(revenueTotal), extra: "ຈາກບິນຈິງ", color: C.gold },
+    { label: "ກໍາໄລປະມານ", value: kip(profitTotal), extra: "ຈາກສູດວັດຖຸດິບ", color: C.green },
+    { label: "ບິນ QR", value: `${activeBillsCount}`, extra: "ບິນ QR ທີ່ເປີດຢູ່", color: C.green },
     { label: "ລໍຖ້າຊໍາລະ", value: `${pendingBillsCount}`, extra: "ລໍພະນັກງານຢືນຢັນ", color: C.blue },
   ];
 
@@ -442,11 +624,11 @@ export function ReportsView({
           </style>
         </head>
         <body>
-          ${renderExportTable("Sale report", saleRows)}
-          ${renderExportTable("Best selling menu", bestSellingRows)}
-          ${renderExportTable("Profit", profitRows)}
-          ${renderExportTable("Ingredient in stock", ingredientRows)}
-          ${renderExportTable("Staff shift", staffShiftRows)}
+          ${renderExportTable("ລາຍງານການຂາຍ", saleRows)}
+          ${renderExportTable("ເມນູຂາຍດີ", bestSellingRows)}
+          ${renderExportTable("ກໍາໄລ", profitRows)}
+          ${renderExportTable("ວັດຖຸດິບໃນຄັງ", ingredientRows)}
+          ${renderExportTable("ກະພະນັກງານ", staffShiftRows)}
         </body>
       </html>
     `;
@@ -468,10 +650,10 @@ export function ReportsView({
   }) => {
     const headers = Object.keys(rows[0] ?? {});
     return (
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflow: "hidden" }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflowX: "auto", overflowY: "hidden" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "16px 18px", borderBottom: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{title}</div>
-          <div style={{ fontSize: 12, color: C.textDim }}>{rows.length} rows</div>
+          <div style={{ fontSize: 12, color: C.textDim }}>{rows.length} ແຖວ</div>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
@@ -497,7 +679,7 @@ export function ReportsView({
               {rows.length === 0 && (
                 <tr>
                   <td style={{ padding: "16px", color: C.textDim, fontSize: 13 }} colSpan={Math.max(1, headers.length)}>
-                    No data
+                    ບໍ່ມີຂໍ້ມູນ
                   </td>
                 </tr>
               )}
@@ -535,7 +717,7 @@ export function ReportsView({
               </option>
             ))}
           </select>
-          <Btn onClick={exportSpreadsheet}><Download size={14} /> Export spreadsheet</Btn>
+          <Btn onClick={exportSpreadsheet}><Download size={14} /> ສົ່ງອອກສະເປຣດຊີດ</Btn>
         </div>
       </div>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
@@ -548,6 +730,122 @@ export function ReportsView({
         ))}
       </div>
       <ReportTable title={activeReport.title} rows={activeReport.rows} />
+    </div>
+  );
+}
+
+export function SalesHistoryView({
+  sales,
+}: {
+  sales: SaleItem[];
+}) {
+  const [dateFilter, setDateFilter] = useState("");
+  const filteredSales = dateFilter
+    ? sales.filter((sale) => sale.date === dateFilter)
+    : sales;
+  const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.total, 0);
+  const totalItems = filteredSales.reduce((sum, sale) => sum + sale.items, 0);
+  const averageSale = filteredSales.length > 0 ? totalRevenue / filteredSales.length : 0;
+  const sortedSales = [...filteredSales].sort((a, b) =>
+    `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`),
+  );
+  const availableDates = Array.from(new Set(sales.map((sale) => sale.date))).sort((a, b) => b.localeCompare(a));
+
+  const exportSales = () => {
+    const headers = ["ບິນ", "ລາຍການ", "ລວມ", "ວັນທີ", "ເວລາ"];
+    const rows = sortedSales.map((sale) => [
+      sale.table,
+      sale.items,
+      sale.total,
+      sale.date,
+      sale.time,
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `sales-history-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const cards = [
+    { label: "ການຂາຍ", value: String(filteredSales.length), sub: "ຊໍາລະແລ້ວ", color: C.gold },
+    { label: "ລາຍຮັບ", value: kip(totalRevenue), sub: "ຊ່ວງທີ່ເລືອກ", color: C.green },
+    { label: "ລາຍການ", value: String(totalItems), sub: "ລາຍການທີ່ຂາຍ", color: C.blue },
+    { label: "ສະເລ່ຍ", value: kip(averageSale), sub: "ຕໍ່ບິນ", color: C.red },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 14, color: C.textMid }}>ປະຫວັດການຂາຍ</div>
+          <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>ການຂາຍທີ່ຊໍາລະແລ້ວຈາກບິນ</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <select
+            value={dateFilter}
+            onChange={(event) => setDateFilter(event.target.value)}
+            style={{ minWidth: 170, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", color: C.text, cursor: "pointer", outline: "none", fontFamily: "var(--sans)", fontSize: 13 }}
+          >
+            <option value="">ທຸກວັນທີ</option>
+            {availableDates.map((date) => (
+              <option key={date} value={date}>{date}</option>
+            ))}
+          </select>
+          <Btn onClick={exportSales}><Download size={14} /> ສົ່ງອອກ CSV</Btn>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 14 }}>
+        {cards.map((card) => (
+          <div key={card.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 18 }}>
+            <div style={{ fontSize: 10, color: C.textMid, textTransform: "uppercase", letterSpacing: 1.4 }}>{card.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: card.color, marginTop: 8, fontFamily: "var(--heading)" }}>{card.value}</div>
+            <div style={{ fontSize: 11, color: C.textDim, marginTop: 5 }}>{card.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "16px 18px", borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>ປະຫວັດການຂາຍ</div>
+          <div style={{ fontSize: 12, color: C.textDim }}>{sortedSales.length} ແຖວ</div>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+            <thead>
+              <tr>
+                {["ບິນ", "ລາຍການ", "ລວມ", "ວັນທີ", "ເວລາ"].map((header) => (
+                  <th key={header} style={{ padding: "13px 16px", color: C.textMid, fontSize: 11, textTransform: "uppercase", textAlign: "left", borderBottom: `1px solid ${C.border}`, background: C.card2 }}>
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedSales.map((sale) => (
+                <tr key={`${sale.id}-${sale.sessionId ?? sale.table}`}>
+                  <td style={{ padding: "14px 16px", color: C.text, fontSize: 13, borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>{sale.table}</td>
+                  <td style={{ padding: "14px 16px", color: C.text, fontSize: 13, borderBottom: `1px solid ${C.border}` }}>{sale.items}</td>
+                  <td style={{ padding: "14px 16px", color: C.gold, fontSize: 13, borderBottom: `1px solid ${C.border}`, fontWeight: 800 }}>{kip(sale.total)}</td>
+                  <td style={{ padding: "14px 16px", color: C.text, fontSize: 13, borderBottom: `1px solid ${C.border}` }}>{sale.date}</td>
+                  <td style={{ padding: "14px 16px", color: C.text, fontSize: 13, borderBottom: `1px solid ${C.border}` }}>{sale.time}</td>
+                </tr>
+              ))}
+              {sortedSales.length === 0 && (
+                <tr>
+                  <td colSpan={5} style={{ padding: 18, color: C.textDim, fontSize: 13 }}>ຍັງບໍ່ມີປະຫວັດການຂາຍ.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -567,7 +865,7 @@ export function StaffView({
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <div style={{ color: C.textDim, fontSize: 12 }}>
-          {isAdmin ? "Admin access" : "View only"}
+          {isAdmin ? "ສິດຜູ້ຈັດການ" : "ເບິ່ງໄດ້ເທົ່ານັ້ນ"}
         </div>
         {isAdmin && (
           <Btn
@@ -604,7 +902,7 @@ export function StaffView({
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
               <div>
-                <div style={{ fontSize: 10, color: C.textMid }}>Username</div>
+                <div style={{ fontSize: 10, color: C.textMid }}>ຊື່ຜູ້ໃຊ້</div>
                 <div style={{ fontSize: 13, color: C.text }}>{s.username ?? s.since}</div>
               </div>
               <div style={{ textAlign: "right" }}>

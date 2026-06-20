@@ -44,7 +44,37 @@ export interface StockItem {
   unit: string;
   cur: number;
   min: number;
+  costPerUnit?: number;
+  supplierId?: number | null;
+  supplierName?: string | null;
   image?: string | null;
+}
+
+export interface SupplierItem {
+  id: number;
+  name: string;
+  phone?: string | null;
+  address?: string | null;
+}
+
+export interface SupplyOrderItem {
+  id: number;
+  supplierId: number | null;
+  supplierName: string;
+  staffId: number | null;
+  staffName: string;
+  orderDate: string;
+  totalAmount: number;
+  status: string;
+}
+
+export interface SupplyOrderDetailItem {
+  id: number;
+  supplyOrderId: number;
+  ingredientId: number;
+  ingredientName: string;
+  quantity: number;
+  unitPrice: number;
 }
 
 export interface IngredientItem {

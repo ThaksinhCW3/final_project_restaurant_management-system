@@ -26,7 +26,18 @@ export const persist = async (key: string, val: any): Promise<void> => {
 };
 
 /* ── Helper utilities ── */
-export const kip = (n: number): string => Number(n || 0).toLocaleString("en") + " ₭";
+export const parseCurrency = (value: unknown): number => {
+  const cleaned = String(value ?? "").replace(/[^\d.-]/g, "");
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+export const formatCurrencyInput = (value: unknown): string => {
+  const cleaned = String(value ?? "").replace(/[^\d]/g, "");
+  return cleaned ? Number(cleaned).toLocaleString("en-US") : "";
+};
+
+export const kip = (n: number | string): string => `${parseCurrency(n).toLocaleString("en-US")} ₭`;
 export const uid = (arr: { id: number }[]): number => Math.max(0, ...arr.map(x => x.id)) + 1;
 export const now = (): string => new Date().toTimeString().slice(0, 5);
 export const today = (): string => { 

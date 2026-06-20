@@ -21,10 +21,12 @@ import {
   now,
   uid,
   kip,
+  parseCurrency,
 } from "./config/constants";
 import { NavBtn } from "./components/SharedUI";
 import {
   CategoryFormModal,
+  CategoryManagerModal,
   ConfirmModal,
   MenuFormModal,
   QrDisplayModal,
@@ -32,6 +34,7 @@ import {
   StaffFormModal,
   StockFormModal,
   StockReceiveModal,
+  SupplierManagerModal,
 } from "./components/modals";
 import Dashboard from "./views/Dashboard";
 import CustomerPage from "./views/CustomerPage";
@@ -39,6 +42,7 @@ import {
   BillingView,
   MenuView,
   ReportsView,
+  SalesHistoryView,
   StaffView,
   StockView,
 } from "./views/ManagementPages";
@@ -48,6 +52,10 @@ import type {
   SaleItem,
   StaffItem,
   StockItem,
+  SupplierItem,
+  SupplyOrderDetailItem,
+  SupplyOrderItem,
+  TableItem,
   SessionItem,
   IngredientItem,
   RecipeItem,
@@ -80,7 +88,7 @@ const readStoredUser = (): AuthUser | null => {
 };
 
 const roleLabel = (role?: string | null) =>
-  role === "manager" ? "Admin" : "Staff";
+  role === "manager" ? "ຜູ້ຈັດການ" : "ພະນັກງານ";
 
 export default function App() {
   const [view, setView] = useState<string>("dashboard");
@@ -88,10 +96,14 @@ export default function App() {
   const [sales, setSales] = useState<SaleItem[]>([]);
   const [staff, setStaff] = useState<StaffItem[]>([]);
   const [stock, setStock] = useState<StockItem[]>([]);
+  const [tables, setTables] = useState<TableItem[]>([]);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [ingredients, setIngredients] = useState<IngredientItem[]>([]);
   const [recipes, setRecipes] = useState<RecipeItem[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
+  const [supplyOrders, setSupplyOrders] = useState<SupplyOrderItem[]>([]);
+  const [supplyOrderDetails, setSupplyOrderDetails] = useState<SupplyOrderDetailItem[]>([]);
 
   const [selSession, setSelSession] = useState<string | null>(null);
   const [activeCat, setActiveCat] = useState<string>("ທັງໝົດ");
@@ -110,8 +122,16 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() =>
     readStoredUser(),
   );
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
+  const [registerForm, setRegisterForm] = useState({
+    name: "",
+    username: "",
+    password: "",
+    phone: "",
+  });
   const [loginError, setLoginError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const paymentLocks = useRef(new Set<string>());
   const isAdmin = currentUser?.role === "manager";
@@ -133,22 +153,30 @@ export default function App() {
         apiClient.menus.getAll(),
         apiClient.staff.getAll(),
         apiClient.stock.getAll(),
+        apiClient.tables.getAll(),
         apiClient.sessions.getAll(),
         apiClient.sales.getAll(),
         apiClient.categories.getAll(),
         apiClient.ingredients.getAll(),
         apiClient.recipes.getAll(),
+        apiClient.suppliers.getAll(),
+        apiClient.supplyOrders.getAll(),
+        apiClient.supplyOrderDetails.getAll(),
       ]);
 
       const [
         menusRes,
         staffRes,
         stockRes,
+        tablesRes,
         sessionsRes,
         salesRes,
         categoriesRes,
         ingredientsRes,
         recipesRes,
+        suppliersRes,
+        supplyOrdersRes,
+        supplyOrderDetailsRes,
       ] = results;
 
       if (menusRes.status === "fulfilled") setMenu(menusRes.value || []);
@@ -159,6 +187,9 @@ export default function App() {
 
       if (stockRes.status === "fulfilled") setStock(stockRes.value || []);
       else console.error("Failed to load stock", stockRes.reason);
+
+      if (tablesRes.status === "fulfilled") setTables(tablesRes.value || []);
+      else console.error("Failed to load tables", tablesRes.reason);
 
       if (sessionsRes.status === "fulfilled")
         setSessions(sessionsRes.value || []);
@@ -177,6 +208,18 @@ export default function App() {
 
       if (recipesRes.status === "fulfilled") setRecipes(recipesRes.value || []);
       else console.error("Failed to load recipes", recipesRes.reason);
+
+      if (suppliersRes.status === "fulfilled")
+        setSuppliers(suppliersRes.value || []);
+      else console.error("Failed to load suppliers", suppliersRes.reason);
+
+      if (supplyOrdersRes.status === "fulfilled")
+        setSupplyOrders(supplyOrdersRes.value || []);
+      else console.error("Failed to load supply orders", supplyOrdersRes.reason);
+
+      if (supplyOrderDetailsRes.status === "fulfilled")
+        setSupplyOrderDetails(supplyOrderDetailsRes.value || []);
+      else console.error("Failed to load supply order details", supplyOrderDetailsRes.reason);
 
       setLoaded(true);
     })();
@@ -200,12 +243,13 @@ export default function App() {
     const password = loginForm.password;
 
     if (!username || !password) {
-      setLoginError("Enter username and password.");
+      setLoginError("ໃສ່ຊື່ຜູ້ໃຊ້ ແລະ ລະຫັດຜ່ານ.");
       return;
     }
 
     setLoginLoading(true);
     setLoginError("");
+    setAuthNotice("");
 
     try {
       const result = await apiClient.auth.login({ username, password });
@@ -218,9 +262,10 @@ export default function App() {
       setCurrentUser(user);
       window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
       setLoginForm({ username: "", password: "" });
+      setRegisterForm({ name: "", username: "", password: "", phone: "" });
     } catch (err) {
       console.error("Login failed", err);
-      setLoginError("Invalid username or password.");
+      setLoginError("ຊື່ຜູ້ໃຊ້ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ.");
     } finally {
       setLoginLoading(false);
     }
@@ -389,16 +434,17 @@ export default function App() {
     await apiClient.sessions.replaceItems(sessionId, items);
   };
 
-  const addItem = async (sessionId: string, menuId: number) => {
+  const addItem = async (sessionId: string, menuId: number, quantity = 1) => {
     const session = sessions.find((item) => item.id === sessionId);
     if (!session || session.status === "pending_payment") return;
 
+    const safeQuantity = Math.max(1, Number(quantity) || 1);
     const existing = session.items.find((item) => item.id === menuId);
     const items = existing
       ? session.items.map((item) =>
-          item.id === menuId ? { ...item, qty: item.qty + 1 } : item,
+          item.id === menuId ? { ...item, qty: item.qty + safeQuantity } : item,
         )
-      : [...session.items, { id: menuId, qty: 1 }];
+      : [...session.items, { id: menuId, qty: safeQuantity }];
 
     setSessions((prev) =>
       prev.map((item) => (item.id === sessionId ? { ...item, items } : item)),
@@ -413,7 +459,7 @@ export default function App() {
           item.id === sessionId ? { ...item, items: session.items } : item,
         ),
       );
-      toast("Could not save bill items", "error");
+      toast("ບັນທຶກລາຍການບິນບໍ່ສຳເລັດ", "error");
     }
   };
 
@@ -444,23 +490,102 @@ export default function App() {
           item.id === sessionId ? { ...item, items: session.items } : item,
         ),
       );
-      toast("Could not save bill items", "error");
+      toast("ບັນທຶກລາຍການບິນບໍ່ສຳເລັດ", "error");
     }
   };
 
   const showQr = (session: SessionItem) =>
     setModal({
       type: "qr-display",
-      title: "QR Bill",
+      title: "ບິນ QR",
       data: session,
     });
 
-  const createBill = () =>
+  const refreshTables = async () => {
+    const nextTables = await apiClient.tables.getAll();
+    setTables(nextTables);
+    return nextTables;
+  };
+
+  const createTable = async (data: { tableNumber: string; seats: string; zone?: string }) => {
+    try {
+      await apiClient.tables.create({
+        tableNumber: data.tableNumber,
+        seats: data.seats,
+        zone: data.zone ?? null,
+      });
+      await refreshTables();
+      toast(`ສ້າງໂຕະ ${data.tableNumber} ສຳເລັດ`, "success");
+    } catch (err) {
+      console.error("Create table failed", err);
+      toast("ສ້າງໂຕະບໍ່ສຳເລັດ", "error");
+      throw err;
+    }
+  };
+
+  const submitRegister = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = registerForm.name.trim();
+    const username = registerForm.username.trim();
+    const password = registerForm.password;
+
+    if (!name || !username || !password) {
+      setLoginError("ໃສ່ຊື່, ຊື່ຜູ້ໃຊ້ ແລະ ລະຫັດຜ່ານ.");
+      return;
+    }
+
+    if (password.length < 4) {
+      setLoginError("ລະຫັດຜ່ານຕ້ອງມີຢ່າງໜ້ອຍ 4 ຕົວອັກສອນ.");
+      return;
+    }
+
+    setLoginLoading(true);
+    setLoginError("");
+    setAuthNotice("");
+
+    try {
+      await apiClient.auth.register({
+        name,
+        username,
+        password,
+        phone: registerForm.phone.trim(),
+      });
+      setAuthMode("login");
+      setLoginForm({ username, password: "" });
+      setRegisterForm({ name: "", username: "", password: "", phone: "" });
+      setAuthNotice("ສ້າງບັນຊີພະນັກງານແລ້ວ. ເຂົ້າລະບົບດ້ວຍລະຫັດຜ່ານຂອງທ່ານ.");
+    } catch (err: any) {
+      console.error("Register failed", err);
+      setLoginError(err?.response?.data?.error ?? "ສ້າງບັນຊີພະນັກງານບໍ່ສຳເລັດ.");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const deleteTable = async (id: number) => {
+    try {
+      await apiClient.tables.delete(id);
+      await refreshTables();
+      toast(`ລຶບໂຕະ ${id} ສຳເລັດ`, "success");
+    } catch (err) {
+      console.error("Delete table failed", err);
+      toast("ລຶບໂຕະບໍ່ສຳເລັດ", "error");
+    }
+  };
+
+  const createBill = () => {
+    const firstFreeTable = tables.find((table) => table.status === "free");
     setModal({
       type: "session-form",
-      title: "Generate QR Bill",
-      data: { sessionType: "dine-in", note: "", staffId: "" },
+      title: "ສ້າງບິນ QR",
+      data: {
+        sessionType: "dine-in",
+        note: "",
+        tableNumber: firstFreeTable?.id ? String(firstFreeTable.id) : "",
+        staffId: currentUser?.id ?? "",
+      },
     });
+  };
 
   const openTable = async (id: number) => {
     void id;
@@ -662,7 +787,7 @@ export default function App() {
           .map((value: any) => ({
             ...value,
             name: String(value.name ?? "").trim(),
-            priceDelta: Number(value.priceDelta || 0),
+            priceDelta: parseCurrency(value.priceDelta || 0),
           }))
           .filter((value: any) => value.name),
       }))
@@ -678,7 +803,7 @@ export default function App() {
 
     const cleaned = {
       ...data,
-      price: Number(data.price),
+      price: parseCurrency(data.price),
       cat: categoryName,
       sold: data.sold ?? 0,
       ok: Boolean(data.ok),
@@ -721,11 +846,16 @@ export default function App() {
       return;
     }
 
+    const editingId = modal.data.id ?? modal.data.category_id ?? modal.data.categoryId;
     const exists = categories.some((category) => {
+      const categoryId = category.category_id ?? category.categoryId ?? category.id;
       const name = String(
         category.category_name ?? category.categoryName ?? category.name ?? "",
       ).trim();
-      return name.toLocaleLowerCase() === categoryName.toLocaleLowerCase();
+      return (
+        Number(categoryId) !== Number(editingId) &&
+        name.toLocaleLowerCase() === categoryName.toLocaleLowerCase()
+      );
     });
 
     if (exists) {
@@ -734,6 +864,12 @@ export default function App() {
     }
 
     try {
+      if (editingId) {
+        await updateCategory(Number(editingId), categoryName);
+        setModal(null);
+        return;
+      }
+
       const result = await apiClient.categories.create({
         category_name: categoryName,
       });
@@ -754,6 +890,82 @@ export default function App() {
       setModal(null);
     } catch (err) {
       console.error("Category operation failed", err);
+      toast("ຜິດພາດ", "error");
+    }
+  };
+
+  const updateCategory = async (id: number, categoryName: string) => {
+    const nextName = categoryName.trim();
+    if (!nextName) {
+      toast("ໃສ່ຊື່ໝວດ", "error");
+      return;
+    }
+
+    const currentCategory = categories.find(
+      (category) => Number(category.category_id ?? category.categoryId ?? category.id) === id,
+    );
+    const oldName = String(
+      currentCategory?.category_name ?? currentCategory?.categoryName ?? currentCategory?.name ?? "",
+    );
+    const exists = categories.some((category) => {
+      const categoryId = Number(category.category_id ?? category.categoryId ?? category.id);
+      const name = String(category.category_name ?? category.categoryName ?? category.name ?? "").trim();
+      return categoryId !== id && name.toLocaleLowerCase() === nextName.toLocaleLowerCase();
+    });
+
+    if (exists) {
+      toast("ໝວດນີ້ມີແລ້ວ", "error");
+      return;
+    }
+
+    try {
+      await apiClient.categories.update(id, { category_name: nextName });
+      setCategories((current) =>
+        current.map((category) =>
+          Number(category.category_id ?? category.categoryId ?? category.id) === id
+            ? {
+                ...category,
+                id,
+                category_id: id,
+                name: nextName,
+                category_name: nextName,
+                categoryName: nextName,
+              }
+            : category,
+        ),
+      );
+      setMenu((current) =>
+        current.map((item) =>
+          item.categoryId === id || item.cat === oldName
+            ? { ...item, cat: nextName }
+            : item,
+        ),
+      );
+      if (activeCat === oldName) setActiveCat(nextName);
+      toast(`ອັບເດດໝວດ «${nextName}»`);
+    } catch (err) {
+      console.error("Category update failed", err);
+      toast("ຜິດພາດ", "error");
+    }
+  };
+
+  const deleteCategory = async (id: number, name: string) => {
+    try {
+      await apiClient.categories.delete(id);
+      setCategories((current) =>
+        current.filter((category) => Number(category.category_id ?? category.categoryId ?? category.id) !== id),
+      );
+      setMenu((current) =>
+        current.map((item) =>
+          item.categoryId === id || item.cat === name
+            ? { ...item, categoryId: null, cat: "ບໍ່ມີໝວດ" }
+            : item,
+        ),
+      );
+      if (activeCat === name) setActiveCat("ທັງໝົດ");
+      toast(`ລົບໝວດ «${name}»`, "info");
+    } catch (err) {
+      console.error("Category delete failed", err);
       toast("ຜິດພາດ", "error");
     }
   };
@@ -781,7 +993,7 @@ export default function App() {
     if (!modal?.data) return;
     const data = modal.data;
     if (!isAdmin) {
-      toast("Admin only", "error");
+      toast("ສຳລັບຜູ້ຈັດການເທົ່ານັ້ນ", "error");
       return;
     }
 
@@ -789,7 +1001,7 @@ export default function App() {
     const password = String(data.password ?? "");
 
     if (!data.name || !username || (!data.id && !password)) {
-      toast("ໃສ່ຊື່, username ແລະ password", "error");
+      toast("ໃສ່ຊື່, ຊື່ຜູ້ໃຊ້ ແລະ ລະຫັດຜ່ານ", "error");
       return;
     }
 
@@ -850,7 +1062,7 @@ export default function App() {
             }
           },
         })
-      : toast("Admin only", "error");
+      : toast("ສຳລັບຜູ້ຈັດການເທົ່ານັ້ນ", "error");
 
   const submitStock = async () => {
     if (!modal?.data) return;
@@ -863,17 +1075,20 @@ export default function App() {
       ...data,
       cur: Number(data.cur),
       min: Number(data.min || 0),
+      costPerUnit: parseCurrency(data.costPerUnit ?? 0),
+      supplierId: data.supplierId === "" || data.supplierId == null ? null : Number(data.supplierId),
     };
+    const supplierName = suppliers.find((supplier) => supplier.id === cleaned.supplierId)?.name ?? null;
     try {
       if (data.id) {
         await apiClient.stock.update(data.id, cleaned);
         setStock((p) =>
-          p.map((s) => (s.id === data.id ? { ...s, ...cleaned } : s)),
+          p.map((s) => (s.id === data.id ? { ...s, ...cleaned, supplierName } : s)),
         );
         toast(`ອັບເດດ «${data.name}»`);
       } else {
         const result = await apiClient.stock.create(cleaned);
-        setStock((p) => [...p, { ...cleaned, id: result.data.id }]);
+        setStock((p) => [...p, { ...cleaned, supplierName, id: result.data.id }]);
         toast(`ເພີ່ມ «${data.name}»`);
       }
       setModal(null);
@@ -902,37 +1117,158 @@ export default function App() {
       },
     });
 
-  const submitReceive = () => {
+  const submitSupplier = async () => {
+    if (!modal?.data) return;
+    const data = modal.data;
+    const name = String(data.name ?? "").trim();
+
+    if (!name) {
+      toast("ໃສ່ຊື່ຜູ້ສະໜອງ", "error");
+      return;
+    }
+
+    const payload = {
+      name,
+      phone: String(data.phone ?? "").trim(),
+    };
+
+    try {
+      if (data.id) {
+        await apiClient.suppliers.update(data.id, payload);
+        setSuppliers((current) =>
+          current.map((supplier) =>
+            supplier.id === data.id ? { ...supplier, ...payload } : supplier,
+          ),
+        );
+        setStock((current) =>
+          current.map((item) =>
+            item.supplierId === data.id ? { ...item, supplierName: payload.name } : item,
+          ),
+        );
+        toast(`ອັບເດດ «${name}»`);
+      } else {
+        const result = await apiClient.suppliers.create(payload);
+        const id = Number(result.data.supplier_id ?? result.data.supplierId ?? result.data.id);
+        setSuppliers((current) => [...current, { id, ...payload }]);
+        toast(`ເພີ່ມ «${name}»`);
+      }
+      setField("id", undefined);
+      setField("name", "");
+      setField("phone", "");
+    } catch (err) {
+      console.error("Supplier operation failed", err);
+      toast("ຜິດພາດ", "error");
+    }
+  };
+
+  const editSupplier = (supplier: SupplierItem) => {
+    setModal({
+      type: "supplier-manager",
+      title: "ຜູ້ສະໜອງ",
+      data: {
+        id: supplier.id,
+        name: supplier.name,
+        phone: supplier.phone ?? "",
+      },
+    });
+  };
+
+  const deleteSupplier = (supplier: SupplierItem) =>
+    setModal({
+      type: "confirm",
+      title: "ລົບຜູ້ສະໜອງ",
+      msg: `ລົບ «${supplier.name}» ບໍ?`,
+      data: { id: supplier.id },
+      onConfirm: async () => {
+        try {
+          await apiClient.suppliers.delete(supplier.id);
+          setSuppliers((current) => current.filter((item) => item.id !== supplier.id));
+          setModal({
+            type: "supplier-manager",
+            title: "ຜູ້ສະໜອງ",
+            data: { name: "", phone: "" },
+          });
+          toast(`ລົບ «${supplier.name}»`, "info");
+        } catch (err) {
+          console.error("Supplier delete failed", err);
+          toast("ຜິດພາດ", "error");
+        }
+      },
+    });
+
+  const submitReceive = async () => {
     if (!modal?.data) return;
     const data = modal.data;
     if (!data.qty || Number(data.qty) <= 0) {
       toast("ໃສ່ຈຳນວນ", "error");
       return;
     }
-    setStock((p) =>
-      p.map((s) =>
-        s.id === data.id ? { ...s, cur: s.cur + Number(data.qty) } : s,
-      ),
-    );
-    toast(`ເພີ່ມ ${data.qty} ${data.unit} ສຳເລັດ`, "success");
-    setModal(null);
+    try {
+      const response = await apiClient.stock.receive(data.id, {
+        qty: data.qty,
+        costPrice: data.costPrice ?? data.costPerUnit ?? 0,
+        supplierId: data.supplierId ?? null,
+        staffId: staff.some((item) => item.id === currentUser?.id)
+          ? currentUser?.id
+          : staff[0]?.id ?? currentUser?.id ?? null,
+        remark: data.remark ?? "",
+      });
+      const nextCur = Number(response.data.cur ?? Number(data.cur) + Number(data.qty));
+      const nextCost = parseCurrency(response.data.costPrice ?? data.costPrice ?? data.costPerUnit ?? 0);
+      const nextSupplierId = response.data.supplierId ?? data.supplierId ?? null;
+      const supplierName = suppliers.find((supplier) => supplier.id === Number(nextSupplierId))?.name ?? data.supplierName ?? null;
+
+      setStock((p) =>
+        p.map((s) =>
+          s.id === data.id
+            ? {
+                ...s,
+                cur: nextCur,
+                costPerUnit: nextCost,
+                supplierId: nextSupplierId === null ? null : Number(nextSupplierId),
+                supplierName,
+              }
+            : s,
+        ),
+      );
+      const [orders, orderDetails] = await Promise.all([
+        apiClient.supplyOrders.getAll(),
+        apiClient.supplyOrderDetails.getAll(),
+      ]);
+      setSupplyOrders(orders);
+      setSupplyOrderDetails(orderDetails);
+      toast(`ເພີ່ມ ${data.qty} ${data.unit} ສຳເລັດ`, "success");
+      setModal(null);
+    } catch (err) {
+      console.error("Receive stock failed", err);
+      toast("ຜິດພາດ", "error");
+    }
   };
 
   const submitSession = async () => {
     if (!modal?.data) return;
     const data = modal.data;
     const note = String(data.note ?? "").trim();
+    const sessionType = data.sessionType ?? "dine-in";
+    const tableNumber = sessionType === "dine-in" ? data.tableNumber : null;
+
+    if (sessionType === "dine-in" && !tableNumber) {
+      toast("ເລືອກໂຕະກ່ອນ", "error");
+      return;
+    }
+
     try {
       const created = await apiClient.sessions.create({
-        sessionType: data.sessionType ?? "dine-in",
+        sessionType,
         note,
-        tableNumber: null,
-        staffId: data.staffId ?? null,
+        tableNumber,
+        staffId: currentUser?.id ?? null,
         status: "Active",
       });
       setSessions((p) => [created, ...p]);
+      await refreshTables();
       setSelSession(created.id);
-      setModal({ type: "qr-display", title: "QR Bill", data: created });
+      setModal({ type: "qr-display", title: "ບິນ QR", data: created });
       toast(`ສ້າງ ${created.id} ສຳເລັດ`, "success");
     } catch (err) {
       console.error("Session creation failed", err);
@@ -948,20 +1284,20 @@ export default function App() {
       await apiClient.sessions.update(id, {
         sessionType: session.sessionType ?? "dine-in",
         note: session.note,
-        tableNumber: null,
+        tableNumber: session.tableNumber ?? null,
         staffId: session.staffId ?? null,
         status: "PendingPayment",
       });
     } catch (err) {
       console.error("Request payment failed", err);
-      toast("Could not request payment", "error");
+      toast("ຂໍການຊໍາລະບໍ່ສຳເລັດ", "error");
       return;
     }
 
     setSessions((p) =>
       p.map((x) =>
         x.id === id
-          ? { ...x, status: "pending_payment", orderStatus: null }
+      ? { ...x, status: "pending_payment", orderStatus: null }
           : x,
       ),
     );
@@ -975,7 +1311,7 @@ export default function App() {
     if (!session) return;
     const sessionNumericId = parseSessionId(session.id);
     if (sessionNumericId === null) {
-      toast("Invalid bill id", "error");
+      toast("ລະຫັດບິນບໍ່ຖືກຕ້ອງ", "error");
       return;
     }
 
@@ -1019,12 +1355,13 @@ export default function App() {
       await apiClient.sessions.update(sessionNumericId, {
         sessionType: session.sessionType ?? "dine-in",
         note: session.note,
-        tableNumber: null,
+        tableNumber: session.tableNumber ?? null,
         staffId: session.staffId ?? null,
         status: "Completed",
         endedAt: new Date().toISOString(),
       });
       setSessions((p) => p.filter((x) => x.id !== id));
+      await refreshTables();
       if (selSession === id) setSelSession(null);
       setModal(null);
       paymentLocks.current.delete(id);
@@ -1039,7 +1376,7 @@ export default function App() {
   const cancelSession = (id: string) =>
     setModal({
       type: "confirm",
-      title: "ຍົກເລີກ Bill",
+      title: "ຍົກເລີກບິນ",
       msg: `ຍົກເລີກ ${id} ຫຼື ບໍ?`,
       data: { id },
       onConfirm: async () => {
@@ -1050,13 +1387,14 @@ export default function App() {
             await apiClient.sessions.update(sessionNumericId, {
               sessionType: session.sessionType ?? "dine-in",
               note: session.note,
-              tableNumber: null,
+              tableNumber: session.tableNumber ?? null,
               staffId: session.staffId ?? null,
               status: "Completed",
               endedAt: new Date().toISOString(),
             });
           }
           setSessions((p) => p.filter((s) => s.id !== id));
+          await refreshTables();
           if (selSession === id) setSelSession(null);
           setModal(null);
           toast(`ຍົກເລີກ ${id}`, "info");
@@ -1126,7 +1464,7 @@ export default function App() {
     ...menu.map((item) => ({
       id: `menu-${item.id}`,
       title: item.name,
-      page: "Menu",
+      page: "ເມນູ",
       detail: `${item.cat} · ${kip(item.price)} · ${item.ok ? "ເປີດ" : "ປິດ"}`,
       view: "menu",
       terms: [item.name, item.en, item.cat, item.price, item.ok ? "open ເປີດ" : "closed ປິດ"],
@@ -1134,31 +1472,31 @@ export default function App() {
     ...stock.map((item) => ({
       id: `stock-${item.id}`,
       title: item.name,
-      page: "Stock",
-      detail: `${item.cur} ${item.unit} · min ${item.min}`,
+      page: "ຄັງ",
+      detail: `${item.cur} ${item.unit} · ຕ່ຳສຸດ ${item.min}`,
       view: "stock",
       terms: [item.name, item.unit, item.cur, item.min],
     })),
     ...ingredients.map((item) => ({
       id: `ingredient-${item.id}`,
       title: item.name,
-      page: "Stock",
-      detail: `${item.stockQuantity} ${item.unit} · cost ${item.costPerUnit}`,
+      page: "ຄັງ",
+      detail: `${item.stockQuantity} ${item.unit} · ຕົ້ນທຶນ ${item.costPerUnit}`,
       view: "stock",
       terms: [item.name, item.unit, item.stockQuantity, item.costPerUnit],
     })),
     ...sessions.map((session) => ({
       id: `session-${session.id}`,
       title: session.id,
-      page: "Billing",
-      detail: `${session.note || "Bill"} · ${session.status}`,
+      page: "ບິນ",
+      detail: `${session.note || "ບິນ"} · ${session.status}`,
       view: "billing",
       terms: [session.id, session.note, session.status, session.payMethod, session.tableNumber],
     })),
     ...sales.map((sale) => ({
       id: `sale-${sale.id}`,
       title: sale.table,
-      page: "Reports",
+      page: "ລາຍງານ",
       detail: `${kip(sale.total)} · ${sale.date} ${sale.time}`,
       view: "reports",
       terms: [sale.table, sale.items, sale.total, sale.date, sale.time],
@@ -1166,7 +1504,7 @@ export default function App() {
     ...staff.map((member) => ({
       id: `staff-${member.id}`,
       title: member.name,
-      page: "Staff",
+      page: "ພະນັກງານ",
       detail: `${roleLabel(member.role)} · ${member.username ?? member.since}`,
       view: "staff",
       terms: [member.name, member.role, member.username, member.phone, member.since],
@@ -1177,8 +1515,8 @@ export default function App() {
       return {
         id: `category-${id}`,
         title: name,
-        page: "Menu",
-        detail: "Menu category",
+        page: "ເມນູ",
+        detail: "ໝວດເມນູ",
         view: "menu",
         terms: [name],
       };
@@ -1204,27 +1542,27 @@ export default function App() {
       .filter((session) => session.status === "pending_payment")
       .map((session) => ({
         id: `pending-${session.id}`,
-        title: "Payment waiting",
-        detail: `${session.id} · ${session.note || "Customer bill"}`,
+        title: "ລໍຖ້າຊໍາລະ",
+        detail: `${session.id} · ${session.note || "ບິນລູກຄ້າ"}`,
         view: "billing",
       })),
     ...lowIngredientItems.map((ingredient) => ({
       id: `ingredient-${ingredient.id}`,
-      title: "Low ingredient stock",
+      title: "ວັດຖຸດິບໃກ້ໝົດ",
       detail: `${ingredient.name}: ${ingredient.stockQuantity} ${ingredient.unit}`,
       view: "stock",
     })),
     ...lowStockItems.map((item) => ({
       id: `stock-${item.id}`,
-      title: "Low stock item",
+      title: "ສິນຄ້າໃກ້ໝົດ",
       detail: `${item.name}: ${item.cur} ${item.unit}`,
       view: "stock",
     })),
     ...(sessions.length > 0
       ? [{
           id: "active-bills",
-          title: "Active bills",
-          detail: `${sessions.length} open · ${pendingBillsCount} waiting payment`,
+          title: "ບິນທີ່ເປີດ",
+          detail: `${sessions.length} ເປີດ · ${pendingBillsCount} ລໍຖ້າຊໍາລະ`,
           view: "pos",
         }]
       : []),
@@ -1235,10 +1573,11 @@ export default function App() {
 
   const navItems = [
     { id: "dashboard", icon: LayoutDashboard, label: "ຫຼັກ" },
-    { id: "pos", icon: ShoppingCart, label: "POS" },
+    { id: "pos", icon: ShoppingCart, label: "ຂາຍ" },
     { id: "menu", icon: Utensils, label: "ເມນູ" },
     { id: "stock", icon: Package, label: "ຄັງ" },
-    { id: "billing", icon: QrCode, label: "Bill" },
+    { id: "billing", icon: QrCode, label: "ບິນ" },
+    { id: "sales-history", icon: ShoppingCart, label: "ການຂາຍ" },
     { id: "reports", icon: BarChart2, label: "ລາຍງານ" },
     { id: "staff", icon: Users, label: "ພະນັກ" },
   ];
@@ -1249,6 +1588,7 @@ export default function App() {
     menu: "ເມນູ",
     stock: "ຄັງ",
     billing: "ບິນ",
+    "sales-history": "ປະຫວັດການຂາຍ",
     reports: "ລາຍງານ",
     staff: "ພະນັກ",
   };
@@ -1266,7 +1606,7 @@ export default function App() {
   if (billId || isCustomerPage) {
     return (
       <CustomerPage
-        billId={billId ?? "Menu"}
+        billId={billId ?? "ເມນູ"}
         loaded={loaded}
         session={customerSession ?? null}
         menu={menu}
@@ -1279,44 +1619,117 @@ export default function App() {
   }
 
   if (!currentUser) {
+    const isRegistering = authMode === "register";
+
     return (
       <div className="login-page">
-        <form className="login-panel" onSubmit={submitLogin}>
+        <form className="login-panel" onSubmit={isRegistering ? submitRegister : submitLogin}>
           <div className="login-logo">
             <ChefHat size={24} color={C.gold} />
           </div>
-          <div className="login-kicker">Olay Khao Soi</div>
-          <div className="login-title">Staff login</div>
+          <div className="login-kicker">ໂອເລ້ເຂົ້າຊອຍ</div>
+          <div className="login-title">{isRegistering ? "ລົງທະບຽນພະນັກງານ" : "ເຂົ້າລະບົບພະນັກງານ"}</div>
+          <div className="login-tabs" aria-label="ໂໝດການເຂົ້າລະບົບ">
+            <button
+              type="button"
+              className={!isRegistering ? "login-tab login-tab--active" : "login-tab"}
+              onClick={() => {
+                setAuthMode("login");
+                setLoginError("");
+                setAuthNotice("");
+              }}
+            >
+              ເຂົ້າລະບົບ
+            </button>
+            <button
+              type="button"
+              className={isRegistering ? "login-tab login-tab--active" : "login-tab"}
+              onClick={() => {
+                setAuthMode("register");
+                setLoginError("");
+                setAuthNotice("");
+              }}
+            >
+              ລົງທະບຽນ
+            </button>
+          </div>
+          {isRegistering && (
+            <label className="login-field">
+              <span>ຊື່ເຕັມ</span>
+              <input
+                autoFocus
+                value={registerForm.name}
+                onChange={(e) =>
+                  setRegisterForm((current) => ({
+                    ...current,
+                    name: e.target.value,
+                  }))
+                }
+              />
+            </label>
+          )}
           <label className="login-field">
-            <span>Username</span>
+            <span>ຊື່ຜູ້ໃຊ້</span>
             <input
-              autoFocus
-              value={loginForm.username}
+              autoFocus={!isRegistering}
+              value={isRegistering ? registerForm.username : loginForm.username}
               onChange={(e) =>
-                setLoginForm((current) => ({
-                  ...current,
-                  username: e.target.value,
-                }))
+                isRegistering
+                  ? setRegisterForm((current) => ({
+                      ...current,
+                      username: e.target.value,
+                    }))
+                  : setLoginForm((current) => ({
+                      ...current,
+                      username: e.target.value,
+                    }))
               }
             />
           </label>
           <label className="login-field">
-            <span>Password</span>
+            <span>ລະຫັດຜ່ານ</span>
             <input
               type="password"
-              autoComplete="current-password"
-              value={loginForm.password}
+              autoComplete={isRegistering ? "new-password" : "current-password"}
+              value={isRegistering ? registerForm.password : loginForm.password}
               onChange={(e) =>
-                setLoginForm((current) => ({
-                  ...current,
-                  password: e.target.value,
-                }))
+                isRegistering
+                  ? setRegisterForm((current) => ({
+                      ...current,
+                      password: e.target.value,
+                    }))
+                  : setLoginForm((current) => ({
+                      ...current,
+                      password: e.target.value,
+                    }))
               }
             />
           </label>
+          {isRegistering && (
+            <label className="login-field">
+              <span>ເບີໂທ</span>
+              <input
+                value={registerForm.phone}
+                onChange={(e) =>
+                  setRegisterForm((current) => ({
+                    ...current,
+                    phone: e.target.value,
+                  }))
+                }
+                placeholder="ບໍ່ບັງຄັບ"
+              />
+            </label>
+          )}
+          {authNotice && <div className="login-notice">{authNotice}</div>}
           {loginError && <div className="login-error">{loginError}</div>}
           <button className="login-submit" type="submit" disabled={loginLoading}>
-            {loginLoading ? "Signing in..." : "Sign in"}
+            {loginLoading
+              ? isRegistering
+                ? "ກໍາລັງສ້າງບັນຊີ..."
+                : "ກໍາລັງເຂົ້າລະບົບ..."
+              : isRegistering
+                ? "ສ້າງບັນຊີພະນັກງານ"
+                : "ເຂົ້າລະບົບ"}
           </button>
         </form>
       </div>
@@ -1333,7 +1746,7 @@ export default function App() {
             setSidebarHidden(false);
             setSidebarWidth(Math.max(sidebarWidth, 66));
           }}
-          aria-label="Show sidebar"
+          aria-label="ສະແດງແຖບຂ້າງ"
         >
           <ChefHat size={18} />
         </button>
@@ -1365,7 +1778,7 @@ export default function App() {
           ))}
           <div className="app-sidebar-spacer" />
           <div className={`app-sync ${loaded ? "app-sync--saved" : "app-sync--loading"}`}>
-            {loaded ? "● saved" : "● ..."}
+            {loaded ? "● ບັນທຶກແລ້ວ" : "● ..."}
           </div>
           <NavBtn
             icon={Settings}
@@ -1379,7 +1792,7 @@ export default function App() {
             type="button"
             className="app-sidebar-resize"
             onPointerDown={startSidebarResize}
-            aria-label="Resize sidebar"
+            aria-label="ປັບຂະໜາດແຖບຂ້າງ"
           />
         </div>
       )}
@@ -1420,7 +1833,7 @@ export default function App() {
             {showSearchSuggestions && normalizedSearch && (
               <div className={`app-search-suggestions ${searchSuggestionsClosing ? "app-search-suggestions--closing" : ""}`}>
                 {searchSuggestions.length === 0 ? (
-                  <div className="app-search-suggestion-empty">No matches</div>
+                  <div className="app-search-suggestion-empty">ບໍ່ພົບຜົນລັບ</div>
                 ) : (
                   searchSuggestions.map((item) => (
                     <button
@@ -1455,7 +1868,7 @@ export default function App() {
                 type="button"
                 className="app-notification-button"
                 onClick={() => setShowNotifications((current) => !current)}
-                aria-label="Notifications"
+                aria-label="ການແຈ້ງເຕືອນ"
               >
                 <Bell size={17} color={C.textMid} />
                 {notificationItems.length > 0 && (
@@ -1465,7 +1878,7 @@ export default function App() {
               {showNotifications && (
                 <div className="app-notification-panel">
                   <div className="app-notification-header">
-                    <span>Notifications</span>
+                    <span>ການແຈ້ງເຕືອນ</span>
                     <button
                       type="button"
                       onClick={() => {
@@ -1474,12 +1887,12 @@ export default function App() {
                         );
                       }}
                     >
-                      Clear
+                      ລ້າງ
                     </button>
                   </div>
                   <div className="app-notification-list">
                     {notificationItems.length === 0 ? (
-                      <div className="app-notification-empty">No notifications</div>
+                      <div className="app-notification-empty">ບໍ່ມີການແຈ້ງເຕືອນ</div>
                     ) : (
                       notificationItems.map((item) => (
                         <button
@@ -1517,6 +1930,7 @@ export default function App() {
           )}
           {view === "pos" && (
             <POS
+              tables={tables}
               sessions={searchedSessions}
               menu={menu}
               addMenu={searchedMenu}
@@ -1525,6 +1939,8 @@ export default function App() {
               showAddItems={showAddItems}
               setShowAddItems={setShowAddItems}
               createBill={createBill}
+              createTable={createTable}
+              deleteTable={deleteTable}
               showQr={showQr}
               addItem={addItem}
               rmItem={rmItem}
@@ -1543,6 +1959,9 @@ export default function App() {
               cancelSession={cancelSession}
             />
           )}
+          {view === "sales-history" && (
+            <SalesHistoryView sales={searchedSales} />
+          )}
           {view === "menu" && (
             <MenuView
               menu={searchedMenu}
@@ -1558,6 +1977,8 @@ export default function App() {
           {view === "stock" && (
             <StockView
               stock={searchedStock}
+              supplyOrders={supplyOrders}
+              supplyOrderDetails={supplyOrderDetails}
               stockFilter={stockFilter}
               setStockFilter={setStockFilter}
               setModal={setModal}
@@ -1617,6 +2038,23 @@ export default function App() {
         />
       )}
 
+      {modal?.type === "category-manager" && (
+        <CategoryManagerModal
+          modal={modal}
+          categories={categories}
+          onClose={() => setModal(null)}
+          openAddCategory={() =>
+            setModal({
+              type: "category-form",
+              title: "ເພີ່ມໝວດເມນູ",
+              data: { name: "" },
+            })
+          }
+          updateCategory={updateCategory}
+          deleteCategory={deleteCategory}
+        />
+      )}
+
       {modal?.type === "staff-form" && (
         <StaffFormModal
           modal={modal}
@@ -1631,6 +2069,8 @@ export default function App() {
           modal={modal}
           onClose={() => setModal(null)}
           setField={setField}
+          tables={tables}
+          currentUser={currentUser}
           submitSession={submitSession}
         />
       )}
@@ -1642,6 +2082,7 @@ export default function App() {
           setField={setField}
           handleImageUpload={handleImageUpload}
           submitStock={submitStock}
+          suppliers={suppliers}
         />
       )}
 
@@ -1651,6 +2092,19 @@ export default function App() {
           onClose={() => setModal(null)}
           setField={setField}
           submitReceive={submitReceive}
+          suppliers={suppliers}
+        />
+      )}
+
+      {modal?.type === "supplier-manager" && (
+        <SupplierManagerModal
+          modal={modal}
+          suppliers={suppliers}
+          onClose={() => setModal(null)}
+          setField={setField}
+          submitSupplier={submitSupplier}
+          editSupplier={editSupplier}
+          deleteSupplier={deleteSupplier}
         />
       )}
 
@@ -1668,7 +2122,7 @@ export default function App() {
             <div className="error-popup-icon">
               <AlertTriangle size={24} />
             </div>
-            <div className="error-popup-title">Error</div>
+            <div className="error-popup-title">ຜິດພາດ</div>
             <div className="error-popup-message">{latestErrorToast.msg}</div>
             <button
               type="button"
@@ -1679,7 +2133,7 @@ export default function App() {
                 )
               }
             >
-              Try Again
+              ລອງອີກຄັ້ງ
             </button>
           </div>
         </div>

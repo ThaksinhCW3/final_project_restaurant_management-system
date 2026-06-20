@@ -20,7 +20,7 @@ export default function Dashboard({ sales, sessions, menu }: DashboardProps) {
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
         <StatCard label="ລາຍຮັບມື້ນີ້" value={kip(revenueToday)} sub="ຈາກຍອດຂາຍຈິງ" color={C.gold} icon={DollarSign} />
         <StatCard label="ຍອດຂາຍ" value={String(sales.length)} sub="ທຸລະກຳທັງໝົດ" color={C.green} icon={ShoppingCart} />
-        <StatCard label="QR Bills" value={String(sessions.length)} sub={`${pendingPayments} waiting payment`} color={C.blue} icon={Coffee} />
+        <StatCard label="ບິນ QR" value={String(sessions.length)} sub={`${pendingPayments} ລໍຖ້າຊໍາລະ`} color={C.blue} icon={Coffee} />
         <StatCard label="ເມນູທັງໝົດ" value={String(menu.length)} sub={`${openMenus} ລາຍການ ເປີດ`} color={C.amber} icon={Star} />
       </div>
 

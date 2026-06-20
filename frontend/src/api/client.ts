@@ -1,6 +1,6 @@
 import axios from "axios";
-import type { IngredientItem, MenuItem, MenuOptionGroup, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, TableItem, OrderItem } from "../types";
-import { now, today } from "../config/constants";
+import type { IngredientItem, MenuItem, MenuOptionGroup, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, SupplierItem, SupplyOrderDetailItem, SupplyOrderItem, TableItem, OrderItem } from "../types";
+import { now, parseCurrency, today } from "../config/constants";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000/api";
 
@@ -74,6 +74,45 @@ type StockRow = {
   unit: string;
   cur: string | number;
   min: string | number;
+  costPerUnit?: string | number | null;
+  cost_per_unit?: string | number | null;
+  supplierId?: number | null;
+  supplier_id?: number | null;
+  supplierName?: string | null;
+  supplier_name?: string | null;
+};
+
+type SupplierRow = {
+  supplierId?: number;
+  supplier_id?: number;
+  supplierName?: string;
+  supplier_name?: string;
+  phone?: string | null;
+  address?: string | null;
+};
+
+type SupplyOrderRow = {
+  supply_order_id?: number;
+  supplier_order_id?: number;
+  supplier_id?: number | null;
+  supplier_name?: string | null;
+  staff_id?: number | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  order_date?: string;
+  total_amount?: string | number | null;
+  status?: string | null;
+};
+
+type SupplyOrderDetailRow = {
+  supply_order_detail_id?: number;
+  supplier_order_detail_id?: number;
+  supply_order_id?: number;
+  supplier_order_id?: number;
+  ingredient_id?: number;
+  ingredient_name?: string | null;
+  quantity?: string | number;
+  unit_price?: string | number;
 };
 
 type IngredientRow = {
@@ -118,6 +157,12 @@ type TableRow = {
   since: string | null;
   session_id?: number | null;
   sessionId?: number | null;
+};
+
+type TableCreateInput = {
+  tableNumber: number | string;
+  seats: number | string;
+  zone?: string | null;
 };
 
 type OrderRow = {
@@ -209,6 +254,16 @@ type StockCreateInput = {
   cur: number | string;
   min: number | string;
   image?: string | null;
+  costPerUnit?: number | string;
+  supplierId?: number | string | null;
+};
+
+type SupplierCreateInput = {
+  id?: number;
+  name?: string;
+  supplier_name?: string;
+  phone?: string | null;
+  address?: string | null;
 };
 
 type RecipeCreateInput = {
@@ -242,7 +297,7 @@ type SaleCreateInput = {
 };
 
 const toNumber = (value: unknown, fallback = 0): number => {
-  const n = Number(value);
+  const n = typeof value === "string" ? parseCurrency(value) : Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
 
@@ -387,6 +442,36 @@ const normalizeStock = (row: StockRow): StockItem => ({
   unit: row.unit,
   cur: toNumber(row.cur, 0),
   min: toNumber(row.min, 0),
+  costPerUnit: toNumber(row.costPerUnit ?? row.cost_per_unit, 0),
+  supplierId: row.supplierId ?? row.supplier_id ?? null,
+  supplierName: row.supplierName ?? row.supplier_name ?? null,
+});
+
+const normalizeSupplier = (row: SupplierRow): SupplierItem => ({
+  id: row.supplierId ?? row.supplier_id ?? 0,
+  name: row.supplierName ?? row.supplier_name ?? "",
+  phone: row.phone ?? null,
+  address: row.address ?? null,
+});
+
+const normalizeSupplyOrder = (row: SupplyOrderRow): SupplyOrderItem => ({
+  id: row.supply_order_id ?? row.supplier_order_id ?? 0,
+  supplierId: row.supplier_id ?? null,
+  supplierName: row.supplier_name ?? "Supplier",
+  staffId: row.staff_id ?? null,
+  staffName: `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim() || "Staff",
+  orderDate: row.order_date ?? "",
+  totalAmount: toNumber(row.total_amount, 0),
+  status: row.status ?? "pending",
+});
+
+const normalizeSupplyOrderDetail = (row: SupplyOrderDetailRow): SupplyOrderDetailItem => ({
+  id: row.supply_order_detail_id ?? row.supplier_order_detail_id ?? 0,
+  supplyOrderId: row.supply_order_id ?? row.supplier_order_id ?? 0,
+  ingredientId: row.ingredient_id ?? 0,
+  ingredientName: row.ingredient_name ?? "Ingredient",
+  quantity: toNumber(row.quantity, 0),
+  unitPrice: toNumber(row.unit_price, 0),
 });
 
 const normalizeIngredient = (row: IngredientRow): IngredientItem => ({
@@ -487,7 +572,7 @@ const createMenuPayload = (data: MenuCreateInput) => ({
   menu_name: data.name,
   menu_image: data.image ?? null,
   category_id: data.categoryId ?? null,
-  price: Number(data.price),
+  price: parseCurrency(data.price),
   availability: data.ok ? 1 : 0,
   option_groups: (data.optionGroups ?? []).map((group) => ({
     id: group.id,
@@ -497,7 +582,7 @@ const createMenuPayload = (data: MenuCreateInput) => ({
     values: (group.values ?? []).map((value) => ({
       id: value.id,
       name: value.name,
-      priceDelta: Number(value.priceDelta || 0),
+      priceDelta: parseCurrency(value.priceDelta || 0),
     })),
   })),
 });
@@ -549,6 +634,18 @@ export const apiClient = {
     setToken: setAuthToken,
     login: async (data: { username: string; password: string }): Promise<LoginResponse> => {
       const response = await API.post<LoginResponse>("/staffs/login", data);
+      return response.data;
+    },
+    register: async (data: { name: string; username: string; password: string; phone?: string | null }) => {
+      const parts = data.name.trim().split(/\s+/).filter(Boolean);
+      const response = await API.post("/staffs/register", {
+        first_name: parts[0] ?? "",
+        last_name: parts.slice(1).join(" "),
+        role: "employee",
+        username: data.username,
+        password: data.password,
+        phone: data.phone ?? "",
+      });
       return response.data;
     },
   },
@@ -628,6 +725,8 @@ export const apiClient = {
       unit: data.unit,
       cur: Number(data.cur),
       min: Number(data.min),
+      cost_per_unit: parseCurrency(data.costPerUnit ?? 0),
+      supplier_id: data.supplierId === "" || data.supplierId == null ? null : Number(data.supplierId),
     }),
     update: (id: number, data: Partial<StockCreateInput>) => API.put(`/stock/${id}`, {
       name: data.name ?? "",
@@ -635,8 +734,53 @@ export const apiClient = {
       unit: data.unit ?? "kg",
       cur: Number(data.cur ?? 0),
       min: Number(data.min ?? 0),
+      cost_per_unit: parseCurrency(data.costPerUnit ?? 0),
+      supplier_id: data.supplierId === "" || data.supplierId == null ? null : Number(data.supplierId),
+    }),
+    receive: (id: number, data: {
+      qty: number | string;
+      costPrice?: number | string;
+      supplierId?: number | string | null;
+      staffId?: number | string | null;
+      remark?: string;
+    }) => API.post(`/stock/${id}/receive`, {
+      qty: Number(data.qty),
+      cost_price: parseCurrency(data.costPrice ?? 0),
+      supplier_id: data.supplierId === "" || data.supplierId == null ? null : Number(data.supplierId),
+      staff_id: data.staffId === "" || data.staffId == null ? null : Number(data.staffId),
+      remark: data.remark ?? "",
     }),
     delete: (id: number) => API.delete(`/stock/${id}`),
+  },
+
+  suppliers: {
+    getAll: async (): Promise<SupplierItem[]> => {
+      const response = await API.get<SupplierRow[]>("/suppliers");
+      return response.data.map(normalizeSupplier);
+    },
+    create: (data: SupplierCreateInput) => API.post("/suppliers", {
+      supplier_name: data.supplier_name ?? data.name,
+      phone: data.phone ?? "",
+    }),
+    update: (id: number, data: SupplierCreateInput) => API.put(`/suppliers/${id}`, {
+      supplier_name: data.supplier_name ?? data.name,
+      phone: data.phone ?? "",
+    }),
+    delete: (id: number) => API.delete(`/suppliers/${id}`),
+  },
+
+  supplyOrders: {
+    getAll: async (): Promise<SupplyOrderItem[]> => {
+      const response = await API.get<SupplyOrderRow[]>("/supplier-orders");
+      return response.data.map(normalizeSupplyOrder);
+    },
+  },
+
+  supplyOrderDetails: {
+    getAll: async (): Promise<SupplyOrderDetailItem[]> => {
+      const response = await API.get<SupplyOrderDetailRow[]>("/supplier-order-details");
+      return response.data.map(normalizeSupplyOrderDetail);
+    },
   },
 
   ingredients: {
@@ -676,10 +820,17 @@ export const apiClient = {
         sessionId: row.sessionId ?? row.session_id ?? null,
       }));
     },
+    create: (data: TableCreateInput) => API.post("/tables", {
+      table_number: Number(data.tableNumber),
+      capacity: Number(data.seats),
+      zone: data.zone ?? null,
+    }),
     update: (id: number, data: Partial<TableItem>) => API.put(`/tables/${id}`, {
       status: data.status === "free" ? "Completed" : "Active",
       session_id: data.sessionId ?? null,
+      capacity: data.seats,
     }),
+    delete: (id: number) => API.delete(`/tables/${id}`),
   },
 
   sales: {

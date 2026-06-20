@@ -11,7 +11,7 @@ module.exports = (pool) => {
         imports.import_date,
         imports.remark
         FROM imports
-        JOIN suppliers_orders ON imports.supplier_order_id = suppliers_orders.supplier_order_id`
+        JOIN supply_orders ON imports.supplier_order_id = supply_orders.supply_order_id`
         pool.query(query, (err, results) => {
             if (err) {
                 console.error('Error fetching imports:', err);

@@ -6,15 +6,15 @@ module.exports = (pool) => {
     router.get('/', (req, res) => {
         const query = `
             SELECT
-                supplier_order_details.supplier_order_detail_id,
-                supplier_order_details.supplier_order_id,
-                supplier_order_details.ingredient_id,
+                supply_order_details.supply_order_detail_id,
+                supply_order_details.supply_order_id,
+                supply_order_details.ingredient_id,
                 ingredients.ingredient_name,
-                supplier_order_details.quantity,
-                supplier_order_details.unit_price
-            FROM supplier_order_details
-            LEFT JOIN suppliers_orders ON supplier_order_details.supplier_order_id = suppliers_orders.supplier_order_id
-            LEFT JOIN ingredients ON supplier_order_details.ingredient_id = ingredients.ingredient_id
+                supply_order_details.quantity,
+                supply_order_details.unit_price
+            FROM supply_order_details
+            LEFT JOIN supply_orders ON supply_order_details.supply_order_id = supply_orders.supply_order_id
+            LEFT JOIN ingredients ON supply_order_details.ingredient_id = ingredients.ingredient_id
         `;
 
         pool.query(query, (err, results) => {
@@ -25,18 +25,19 @@ module.exports = (pool) => {
 
     // ADD supplier order detail
     router.post('/', (req, res) => {
-        const { supplier_order_id, ingredient_id, quantity, unit_price } = req.body;
+        const { supply_order_id, supplier_order_id, ingredient_id, quantity, unit_price } = req.body;
+        const orderId = supply_order_id ?? supplier_order_id;
         const query = `
-            INSERT INTO supplier_order_details
-                (supplier_order_id, ingredient_id, quantity, unit_price)
+            INSERT INTO supply_order_details
+                (supply_order_id, ingredient_id, quantity, unit_price)
             VALUES (?, ?, ?, ?)
         `;
 
-        pool.query(query, [supplier_order_id, ingredient_id, quantity, unit_price], (err, result) => {
+        pool.query(query, [orderId, ingredient_id, quantity, unit_price], (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
             res.status(201).json({
                 message: 'Supplier order detail added successfully!',
-                supplier_order_detail_id: result.insertId
+                supply_order_detail_id: result.insertId
             });
         });
     });
@@ -48,14 +49,15 @@ module.exports = (pool) => {
             return res.status(400).json({ message: 'Invalid supplier order detail id' });
         }
 
-        const { supplier_order_id, ingredient_id, quantity, unit_price } = req.body;
+        const { supply_order_id, supplier_order_id, ingredient_id, quantity, unit_price } = req.body;
+        const orderId = supply_order_id ?? supplier_order_id;
         const query = `
-            UPDATE supplier_order_details
-            SET supplier_order_id = ?, ingredient_id = ?, quantity = ?, unit_price = ?
-            WHERE supplier_order_detail_id = ?
+            UPDATE supply_order_details
+            SET supply_order_id = ?, ingredient_id = ?, quantity = ?, unit_price = ?
+            WHERE supply_order_detail_id = ?
         `;
 
-        pool.query(query, [supplier_order_id, ingredient_id, quantity, unit_price, id], (err, result) => {
+        pool.query(query, [orderId, ingredient_id, quantity, unit_price, id], (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
             if (result.affectedRows === 0) {
                 return res.status(404).json({ message: 'Supplier order detail not found' });
@@ -71,7 +73,7 @@ module.exports = (pool) => {
             return res.status(400).json({ message: 'Invalid supplier order detail id' });
         }
 
-        const query = 'DELETE FROM supplier_order_details WHERE supplier_order_detail_id = ?';
+        const query = 'DELETE FROM supply_order_details WHERE supply_order_detail_id = ?';
 
         pool.query(query, [id], (err, result) => {
             if (err) return res.status(500).json({ error: err.message });

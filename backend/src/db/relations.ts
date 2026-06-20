@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { imports, importDetails, ingredients, supplyOrders, staff, suppliers, categories, menus, orders, orderItems, serviceSessions, recipes, sales, supplyOrderDetails, attributeTypes, attributes, menuAttributes } from "./schema";
+import { imports, importDetails, ingredients, supplyOrders, staff, suppliers, categories, menus, orders, orderItems, serviceSessions, recipes, sales, supplyOrderDetails, attributeTypes, attributes, menuAttributes, tables } from "./schema";
 
 export const importDetailsRelations = relations(importDetails, ({one}) => ({
 	import: one(imports, {
@@ -122,10 +122,18 @@ export const ordersRelations = relations(orders, ({one, many}) => ({
 export const serviceSessionsRelations = relations(serviceSessions, ({one, many}) => ({
 	orders: many(orders),
 	sales: many(sales),
+	table: one(tables, {
+		fields: [serviceSessions.tableId],
+		references: [tables.tableId]
+	}),
 	staff: one(staff, {
 		fields: [serviceSessions.staffId],
 		references: [staff.staffId]
 	}),
+}));
+
+export const tablesRelations = relations(tables, ({many}) => ({
+	serviceSessions: many(serviceSessions),
 }));
 
 export const recipesRelations = relations(recipes, ({one}) => ({

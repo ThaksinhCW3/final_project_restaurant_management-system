@@ -12,6 +12,30 @@ const toMysqlDateTime = (value) => {
     return parsed.toISOString().slice(0, 19).replace('T', ' ');
 };
 
+const normalizeStatus = (value) => {
+    if (value === 'PendingPayment' || value === 'pending_payment') return 'PendingPayment';
+    if (value === 'Completed') return 'Completed';
+    return 'Active';
+};
+
+const resolveStaffId = (pool, staffId, callback) => {
+    if (staffId === null || staffId === undefined || staffId === '') {
+        callback(null, null);
+        return;
+    }
+
+    const numericStaffId = Number(staffId);
+    if (!Number.isInteger(numericStaffId) || numericStaffId <= 0) {
+        callback(null, null);
+        return;
+    }
+
+    pool.query('SELECT staff_id FROM staff WHERE staff_id = ? LIMIT 1', [numericStaffId], (err, rows) => {
+        if (err) return callback(err);
+        callback(null, rows.length > 0 ? numericStaffId : null);
+    });
+};
+
 module.exports = (pool) => {
     // GET all service sessions
     router.get('/', (req, res) => {
@@ -60,31 +84,35 @@ module.exports = (pool) => {
         const finalSessionType = session_type ?? sessionType ?? 'dine-in';
         const finalNote = note ?? '';
         const finalTableNumber = table_number ?? tableNumber ?? null;
-        const finalStaffId = staff_id ?? staffId ?? null;
+        const rawStaffId = staff_id ?? staffId ?? null;
         const finalEndedAt = toMysqlDateTime(ended_at ?? endedAt ?? null);
-        const finalStatus = status ?? 'Active';
+        const finalStatus = normalizeStatus(status);
         const query = `
             INSERT INTO service_sessions
                 (session_type, note, table_number, staff_id, ended_at, status)
             VALUES (?, ?, ?, ?, ?, ?)
         `;
 
-        pool.query(query, [finalSessionType, finalNote, finalTableNumber, finalStaffId, finalEndedAt, finalStatus], (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({
-                message: 'Service session added successfully!',
-                sessionId: result.insertId,
-                session_id: result.insertId,
-                sessionType: finalSessionType,
-                session_type: finalSessionType,
-                note: finalNote,
-                tableNumber: finalTableNumber,
-                table_number: finalTableNumber,
-                staffId: finalStaffId,
-                staff_id: finalStaffId,
-                endedAt: finalEndedAt,
-                ended_at: finalEndedAt,
-                status: finalStatus
+        resolveStaffId(pool, rawStaffId, (staffErr, finalStaffId) => {
+            if (staffErr) return res.status(500).json({ error: staffErr.message });
+
+            pool.query(query, [finalSessionType, finalNote, finalTableNumber, finalStaffId, finalEndedAt, finalStatus], (err, result) => {
+                if (err) return res.status(500).json({ error: err.message });
+                res.status(201).json({
+                    message: 'Service session added successfully!',
+                    sessionId: result.insertId,
+                    session_id: result.insertId,
+                    sessionType: finalSessionType,
+                    session_type: finalSessionType,
+                    note: finalNote,
+                    tableNumber: finalTableNumber,
+                    table_number: finalTableNumber,
+                    staffId: finalStaffId,
+                    staff_id: finalStaffId,
+                    endedAt: finalEndedAt,
+                    ended_at: finalEndedAt,
+                    status: finalStatus
+                });
             });
         });
     });
@@ -111,29 +139,33 @@ module.exports = (pool) => {
         const finalSessionType = session_type ?? sessionType ?? 'dine-in';
         const finalNote = note ?? '';
         const finalTableNumber = table_number ?? tableNumber ?? null;
-        const finalStaffId = staff_id ?? staffId ?? null;
+        const rawStaffId = staff_id ?? staffId ?? null;
         const finalEndedAt = toMysqlDateTime(ended_at ?? endedAt ?? null);
-        const finalStatus = status ?? 'Active';
+        const finalStatus = normalizeStatus(status);
         const query = `
             UPDATE service_sessions
             SET session_type = ?, note = ?, table_number = ?, staff_id = ?, ended_at = ?, status = ?
             WHERE session_id = ?
         `;
 
-        pool.query(query, [finalSessionType, finalNote, finalTableNumber, finalStaffId, finalEndedAt, finalStatus, id], (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (result.affectedRows === 0) {
-                return res.status(404).json({ message: 'Service session not found' });
-            }
-            res.json({
-                message: 'Service session updated successfully!',
-                sessionId: Number(id),
-                sessionType: finalSessionType,
-                note: finalNote,
-                tableNumber: finalTableNumber,
-                staffId: finalStaffId,
-                endedAt: finalEndedAt,
-                status: finalStatus
+        resolveStaffId(pool, rawStaffId, (staffErr, finalStaffId) => {
+            if (staffErr) return res.status(500).json({ error: staffErr.message });
+
+            pool.query(query, [finalSessionType, finalNote, finalTableNumber, finalStaffId, finalEndedAt, finalStatus, id], (err, result) => {
+                if (err) return res.status(500).json({ error: err.message });
+                if (result.affectedRows === 0) {
+                    return res.status(404).json({ message: 'Service session not found' });
+                }
+                res.json({
+                    message: 'Service session updated successfully!',
+                    sessionId: Number(id),
+                    sessionType: finalSessionType,
+                    note: finalNote,
+                    tableNumber: finalTableNumber,
+                    staffId: finalStaffId,
+                    endedAt: finalEndedAt,
+                    status: finalStatus
+                });
             });
         });
     });

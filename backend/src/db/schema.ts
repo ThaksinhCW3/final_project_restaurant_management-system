@@ -160,17 +160,36 @@ export const sales = mysqlTable("sales", {
 	primaryKey({ columns: [table.salesId], name: "sales_sales_id"}),
 ]);
 
+export const tables = mysqlTable("tables", {
+	tableId: int("table_id").autoincrement().notNull(),
+	tableNumber: int("table_number").notNull(),
+	capacity: int("capacity").default(4),
+	status: mysqlEnum("status", ['available','occupied','reserved','disabled']).default('available').notNull(),
+	zone: varchar("zone", { length: 50 }),
+},
+(table) => [
+	primaryKey({ columns: [table.tableId], name: "tables_table_id"}),
+	unique("tables_table_number_unique").on(table.tableNumber),
+]);
+
 export const serviceSessions = mysqlTable("service_sessions", {
 	sessionId: int("session_id").autoincrement().notNull(),
 	sessionType: mysqlEnum("session_type", ['dine-in','takeaway']),
+	tableId: int("table_id"),
 	tableNumber: int("table_number"),
 	staffId: int("staff_id").references(() => staff.staffId, { onDelete: "set null" } ),
 	startedAt: datetime("started_at", { mode: 'string'}).default(sql`(CURRENT_TIMESTAMP)`),
 	endedAt: datetime("ended_at", { mode: 'string'}),
-	status: mysqlEnum(['Active','Completed']).default('Active'),
+	status: mysqlEnum(['Active','PendingPayment','Completed']).default('Active'),
 },
 (table) => [
+	index("table_id").on(table.tableId),
 	index("staff_id").on(table.staffId),
+	foreignKey({
+		columns: [table.tableId],
+		foreignColumns: [tables.tableId],
+		name: "sessions_table_fk",
+	}).onDelete("set null"),
 	primaryKey({ columns: [table.sessionId], name: "service_sessions_session_id"}),
 ]);
 

@@ -15,15 +15,15 @@ export default function StaffFormModal({ modal, onClose, setField, submitStaff }
     <Modal title={modal.title ?? "ພະນັກງານ"} onClose={onClose}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
         <Inp label="ຊື່" value={modal.data.name} onChange={(e) => setField("name", e.target.value)} />
-        <Inp label="Emoji" value={modal.data.emoji} onChange={(e) => setField("emoji", e.target.value)} />
+        <Inp label="ສັນຍາລັກ" value={modal.data.emoji} onChange={(e) => setField("emoji", e.target.value)} />
         <Sel label="ຕໍາແໜ່ງ" value={modal.data.role} onChange={(e) => setField("role", e.target.value)}>
-          <option value="employee">Staff</option>
-          <option value="manager">Admin</option>
+          <option value="employee">ພະນັກງານ</option>
+          <option value="manager">ຜູ້ຈັດການ</option>
         </Sel>
-        <Inp label="Phone" value={modal.data.phone ?? ""} onChange={(e) => setField("phone", e.target.value)} />
-        <Inp label="Username" value={modal.data.username ?? ""} onChange={(e) => setField("username", e.target.value)} />
+        <Inp label="ເບີໂທ" value={modal.data.phone ?? ""} onChange={(e) => setField("phone", e.target.value)} />
+        <Inp label="ຊື່ຜູ້ໃຊ້" value={modal.data.username ?? ""} onChange={(e) => setField("username", e.target.value)} />
         <Inp
-          label={editing ? "New password" : "Password"}
+          label={editing ? "ລະຫັດຜ່ານໃໝ່" : "ລະຫັດຜ່ານ"}
           type="password"
           autoComplete="new-password"
           value={modal.data.password ?? ""}
