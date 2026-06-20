@@ -609,6 +609,137 @@
   padding: 0;
 }
 
+.pos-shell {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.pos-main {
+  flex: 1;
+  min-width: 0;
+  padding: 22px;
+  overflow: auto;
+}
+
+.pos-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pos-toolbar-spacer {
+  flex: 1;
+  min-width: 12px;
+}
+
+.pos-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid rgba(181, 28, 28, 0.12);
+  color: #5a5a5a;
+  padding: 7px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--sans);
+}
+
+.pos-panel-toggle.is-open {
+  background: rgba(211, 47, 47, 0.12);
+  border-color: rgba(181, 28, 28, 0.25);
+  color: #b71c1c;
+}
+
+.pos-bill-panel {
+  width: 340px;
+  border-left: 1px solid rgba(181, 28, 28, 0.1);
+  background: #f8f4f4;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
+}
+
+.pos-bill-panel--closed {
+  width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pos-bill-panel--closed > * {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  .pos-shell {
+    flex-direction: column;
+  }
+
+  .pos-main {
+    padding: 16px;
+  }
+
+  .pos-toolbar {
+    align-items: stretch;
+  }
+
+  .pos-toolbar > span {
+    width: 100%;
+  }
+
+  .pos-toolbar-spacer {
+    display: none;
+  }
+
+  .pos-toolbar button {
+    justify-content: center;
+  }
+
+  .pos-bill-panel {
+    width: 100%;
+    max-height: 52vh;
+    border-left: 0;
+    border-top: 1px solid rgba(181, 28, 28, 0.1);
+    box-shadow: 0 -14px 34px rgba(35, 10, 10, 0.08);
+  }
+
+  .pos-bill-panel--closed {
+    width: 100%;
+    max-height: 0;
+    transform: translateY(12px);
+  }
+}
+
+@media (max-width: 620px) {
+  .pos-main {
+    padding: 12px;
+  }
+
+  .pos-toolbar {
+    gap: 8px;
+  }
+
+  .pos-toolbar button,
+  .pos-panel-toggle {
+    flex: 1 1 calc(50% - 8px);
+    min-height: 38px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .pos-bill-panel {
+    max-height: 64vh;
+  }
+}
+
 .toast-stack {
   position: fixed;
   bottom: 24px;

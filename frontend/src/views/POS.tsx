@@ -54,6 +54,7 @@ export default function POS({
   const [tableForm, setTableForm] = useState({ tableNumber: String(nextTableNumber), seats: "4", zone: "" });
   const [showTableForm, setShowTableForm] = useState(false);
   const [savingTable, setSavingTable] = useState(false);
+  const [billPanelOpen, setBillPanelOpen] = useState(true);
   const selectedSession = selectedSessionId ? sessions.find(session => session.id === selectedSessionId) : null;
   const pendingPayments = sessions.filter(session => session.status === "pending_payment").length;
   const tableSessionId = (table: TableItem): string | null =>
@@ -81,15 +82,23 @@ export default function POS({
   };
 
   return (
-    <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
-      <div style={{ flex: 1, padding: 22, overflow: "auto" }}>
-        <div style={{ display: "flex", gap: 10, marginBottom: 18, alignItems: "center" }}>
+    <div className={`pos-shell ${billPanelOpen ? "pos-shell--panel-open" : "pos-shell--panel-closed"}`}>
+      <div className="pos-main">
+        <div className="pos-toolbar">
           <span style={{ fontSize: 13, color: C.textMid }}>
             <span style={{ color: C.text, fontWeight: 600 }}>{tables.length}</span> ໂຕະ ·{" "}
             <span style={{ color: C.text, fontWeight: 600 }}>{sessions.length}</span> ບິນ QR ທີ່ເປີດ ·{" "}
             <span style={{ color: C.gold, fontWeight: 600 }}>{pendingPayments}</span> ລໍຖ້າຊໍາລະ
           </span>
-          <div style={{ flex: 1 }} />
+          <div className="pos-toolbar-spacer" />
+          <button
+            onClick={() => setBillPanelOpen((open) => !open)}
+            className={`pos-panel-toggle ${billPanelOpen ? "is-open" : ""}`}
+            type="button"
+            aria-pressed={billPanelOpen}
+          >
+            <QrCode size={13} /> {billPanelOpen ? "ປິດບິນ" : "ເປີດບິນ"}
+          </button>
           <button
             onClick={() => {
               setTableForm((prev) => ({ ...prev, tableNumber: prev.tableNumber || String(nextTableNumber) }));
@@ -163,7 +172,15 @@ export default function POS({
             return (
               <div
                 key={table.id}
-                onClick={() => session && setSelectedSessionId(isSel ? null : session.id)}
+                onClick={() => {
+                  if (!session) return;
+                  if (isSel) {
+                    setBillPanelOpen((open) => !open);
+                  } else {
+                    setSelectedSessionId(session.id);
+                    setBillPanelOpen(true);
+                  }
+                }}
                 style={{
                   background: isSel ? "rgba(211,47,47,0.10)" : C.card,
                   border: `2px solid ${isSel ? C.gold : waitingPayment ? "rgba(208,64,48,0.33)" : occupied ? C.borderMid : C.border}`,
@@ -213,7 +230,7 @@ export default function POS({
         </div>
       </div>
 
-      <div style={{ width: 340, borderLeft: `1px solid ${C.border}`, background: C.sidebar, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+      <div className={`pos-bill-panel ${billPanelOpen ? "pos-bill-panel--open" : "pos-bill-panel--closed"}`}>
         {selectedSession ? (
           <>
             <div style={{ padding: "18px 18px 14px", borderBottom: `1px solid ${C.border}` }}>
@@ -227,7 +244,7 @@ export default function POS({
                   <button onClick={() => showQr(selectedSession)} style={{ background: C.goldDim, border: `1px solid ${C.borderMid}`, color: C.gold, borderRadius: 8, cursor: "pointer", padding: "6px 9px", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}><QrCode size={13} /> QR</button>
                   <button onClick={() => openCustomerView(selectedSession.id)} style={{ background: C.card, border: `1px solid ${C.border}`, color: C.textMid, borderRadius: 8, cursor: "pointer", padding: "6px 9px", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}><ExternalLink size={13} /> ເບິ່ງ</button>
                   <button onClick={() => printOrderBill(selectedSession, menu)} style={{ background: C.card, border: `1px solid ${C.border}`, color: C.textMid, borderRadius: 8, cursor: "pointer", padding: "6px 9px", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}><Printer size={13} /> ພິມ</button>
-                  <button onClick={() => { setSelectedSessionId(null); setShowAddItems(false); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: C.textDim, padding: 4 }}><X size={16} /></button>
+                  <button onClick={() => { setSelectedSessionId(null); setShowAddItems(false); setBillPanelOpen(false); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: C.textDim, padding: 4 }}><X size={16} /></button>
                 </div>
               </div>
               {selectedSession.status === "pending_payment" && (
