@@ -75,6 +75,8 @@ export interface SupplyOrderDetailItem {
   ingredientName: string;
   quantity: number;
   unitPrice: number;
+  receivedQuantity?: number | null;
+  actualUnitPrice?: number | null;
 }
 
 export interface IngredientItem {

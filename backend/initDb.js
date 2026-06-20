@@ -81,6 +81,48 @@ const createTables = async (db) => {
   `);
 
   await db.query(`
+    CREATE TABLE IF NOT EXISTS attribute_types (
+      attribute_type_id INT AUTO_INCREMENT PRIMARY KEY,
+      type_name VARCHAR(100) NOT NULL,
+      selection_type ENUM('single','multiple') NOT NULL DEFAULT 'single',
+      required TINYINT DEFAULT 0
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS attributes (
+      attribute_id INT AUTO_INCREMENT PRIMARY KEY,
+      attribute_type_id INT NOT NULL,
+      attribute_name VARCHAR(100) NOT NULL,
+      price_delta DECIMAL(10,2) DEFAULT 0.00,
+      INDEX attribute_type_id (attribute_type_id),
+      CONSTRAINT attrs_type_fk
+        FOREIGN KEY (attribute_type_id)
+        REFERENCES attribute_types(attribute_type_id)
+        ON DELETE CASCADE
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS menu_attributes (
+      menu_attribute_id INT AUTO_INCREMENT PRIMARY KEY,
+      menu_id INT NOT NULL,
+      attribute_id INT NOT NULL,
+      INDEX menu_id (menu_id),
+      INDEX attribute_id (attribute_id),
+      UNIQUE KEY menu_attributes_menu_id_attribute_id_unique (menu_id, attribute_id),
+      CONSTRAINT menu_attrs_menu_fk
+        FOREIGN KEY (menu_id)
+        REFERENCES menus(menu_id)
+        ON DELETE CASCADE,
+      CONSTRAINT menu_attrs_attr_fk
+        FOREIGN KEY (attribute_id)
+        REFERENCES attributes(attribute_id)
+        ON DELETE CASCADE
+    )
+  `);
+
+  await db.query(`
     CREATE TABLE IF NOT EXISTS recipes (
       recipe_id INT AUTO_INCREMENT PRIMARY KEY,
       menu_id INT NULL,
@@ -159,7 +201,9 @@ const createTables = async (db) => {
       supply_order_id INT NULL,
       ingredient_id INT NULL,
       quantity DECIMAL(10,2) NOT NULL,
-      unit_price DECIMAL(10,2) NOT NULL
+      unit_price DECIMAL(10,2) NOT NULL,
+      received_quantity DECIMAL(10,2) NULL,
+      actual_unit_price DECIMAL(10,2) NULL
     )
   `);
 
@@ -206,6 +250,8 @@ const updateExistingTables = async (db) => {
   await ensureColumn(db, "service_sessions", "note", "VARCHAR(255) NULL");
   await ensureColumn(db, "service_sessions", "table_id", "INT NULL");
   await ensureColumn(db, "imports", "received_by", "INT NULL");
+  await ensureColumn(db, "supply_order_details", "received_quantity", "DECIMAL(10,2) NULL");
+  await ensureColumn(db, "supply_order_details", "actual_unit_price", "DECIMAL(10,2) NULL");
   await db.query("ALTER TABLE menus MODIFY menu_image LONGTEXT NULL");
   await db.query("ALTER TABLE ingredients MODIFY ingredient_image LONGTEXT NULL");
 };

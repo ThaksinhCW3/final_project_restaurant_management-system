@@ -161,47 +161,6 @@ module.exports = (pool) => {
         });
     });
 
-    // Staff self-register route. Public registration always creates employee accounts.
-    router.post('/register', async (req, res) => {
-        const {first_name, last_name, username, password, phone } = req.body;
-        const firstName = String(first_name || '').trim();
-        const lastName = String(last_name || '').trim();
-        const finalUsername = String(username || '').trim();
-        const finalPassword = String(password || '');
-
-        if (!firstName || !finalUsername || !finalPassword) {
-            return res.status(400).json({ error: "Name, username, and password are required" });
-        }
-
-        if (finalPassword.length < 4) {
-            return res.status(400).json({ error: "Password must be at least 4 characters" });
-        }
-
-        try {
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(finalPassword, salt);
-
-            const query = 'INSERT INTO staff (first_name, last_name, role, username, password, phone) VALUES (?, ?, ?, ?, ?, ?)';
-            pool.query(query, [firstName, lastName, 'employee', finalUsername, hashedPassword, phone || null], (err, result) => {
-                if (err) {
-                    if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: "Username already exists"});
-                    return res.status(500).json({ error: err.message});
-                }
-                res.status(201).json({
-                    message: "Staff registered successfully!",
-                    staff: {
-                        id: result.insertId,
-                        name: `${firstName} ${lastName}`.trim(),
-                        role: 'employee',
-                        username: finalUsername,
-                    },
-                });
-            });
-        } catch (err) {
-            res.status(500).json({ error: err.message});
-        }
-    });
-
     // Staff login route
     router.post('/login', (req, res) => {
         const { username, password } = req.body;

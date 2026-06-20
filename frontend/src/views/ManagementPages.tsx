@@ -4,7 +4,7 @@ import type { CSSProperties, Dispatch, SetStateAction } from "react";
 import { Btn } from "../components/SharedUI";
 import { BILL_URL, C, kip } from "../config/constants";
 import type { AppModalState } from "../types/app";
-import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, SupplyOrderDetailItem, SupplyOrderItem } from "../types";
+import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, SupplierItem, SupplyOrderDetailItem, SupplyOrderItem } from "../types";
 import { printOrderBill } from "../utils/printOrderBill";
 import { printSupplyOrderBill } from "../utils/printSupplyOrderBill";
 
@@ -315,6 +315,7 @@ export function MenuView({
 
 export function StockView({
   stock,
+  suppliers,
   supplyOrders,
   supplyOrderDetails,
   stockFilter,
@@ -323,6 +324,7 @@ export function StockView({
   deleteStock,
 }: {
   stock: StockItem[];
+  suppliers: SupplierItem[];
   supplyOrders: SupplyOrderItem[];
   supplyOrderDetails: SupplyOrderDetailItem[];
   stockFilter: string;
@@ -333,6 +335,32 @@ export function StockView({
   const [stockTab, setStockTab] = useState<"ingredients" | "history">("ingredients");
   const visibleStock = stock.filter((r) => stockFilter === "all" || r.cur <= r.min);
   const lowStockCount = stock.filter((r) => r.cur <= r.min).length;
+  const firstStock = stock[0];
+  const orderStatusLabel = (status: string) => {
+    if (status === "waiting_stock") return "Waiting for stock";
+    if (status === "completed") return "Completed";
+    return status || "Pending";
+  };
+  const openReceiveOrder = (order: SupplyOrderItem, details: SupplyOrderDetailItem[]) => {
+    setModal({
+      type: "stock-receive",
+      title: `ກວດສິນຄ້າ #${order.id}`,
+      data: {
+        mode: "receive",
+        orderId: order.id,
+        supplierName: order.supplierName,
+        items: details.map((detail) => ({
+          detailId: detail.id,
+          ingredientId: detail.ingredientId,
+          ingredientName: detail.ingredientName,
+          orderedQuantity: detail.quantity,
+          unitPrice: detail.unitPrice,
+          receivedQuantity: detail.receivedQuantity ?? detail.quantity,
+          actualUnitPrice: (detail.actualUnitPrice ?? detail.unitPrice).toLocaleString("en-US"),
+        })),
+      },
+    });
+  };
   const chipStyle = (active: boolean): CSSProperties => ({
     display: "inline-flex",
     alignItems: "center",
@@ -382,6 +410,30 @@ export function StockView({
             }
           >
             <Truck size={14} /> ຜູ້ສະໜອງ
+          </Btn>
+          <Btn
+            variant="secondary"
+            onClick={() =>
+              setModal({
+                type: "stock-receive",
+                title: "ຮັບເຂົ້າ",
+                data: {
+                  mode: "create",
+                  items: [
+                    {
+                      ingredientId: firstStock?.id ?? "",
+                      qty: "",
+                      unitPrice: firstStock?.costPerUnit
+                        ? firstStock.costPerUnit.toLocaleString("en-US")
+                        : "",
+                      supplierId: firstStock?.supplierId ?? suppliers[0]?.id ?? "",
+                    },
+                  ],
+                },
+              })
+            }
+          >
+            <Truck size={14} /> ຮັບເຂົ້າ
           </Btn>
           <Btn
             onClick={() =>
@@ -436,7 +488,6 @@ export function StockView({
               <span style={{ fontSize: 12, color: C.textDim }}>{kip(r.costPerUnit ?? 0)}</span>
               <span style={{ fontSize: 12, color: C.textDim }}>{r.supplierName || "—"}</span>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => setModal({ type: "stock-receive", title: `ນໍາເຂົ້າ ${r.name}`, data: { ...r, qty: "", costPrice: r.costPerUnit ? r.costPerUnit.toLocaleString("en-US") : "", supplierId: r.supplierId ?? "", remark: "" } })} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>ຮັບເຂົ້າ</button>
                 <button onClick={() => setModal({ type: "stock-form", title: "ແກ້ໄຂສິນຄ້າ", data: { ...r, image: r.image ?? "", cur: String(r.cur), min: String(r.min), costPerUnit: r.costPerUnit ? r.costPerUnit.toLocaleString("en-US") : "", supplierId: r.supplierId ?? "" } })} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>ແກ້ໄຂ</button>
                 <button onClick={() => deleteStock(r.id, r.name)} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid rgba(208,64,48,0.3)`, background: "rgba(208,64,48,0.08)", cursor: "pointer", color: C.red }}>ລຶບ</button>
               </div>
@@ -452,27 +503,35 @@ export function StockView({
           <div style={{ color: C.textMid, fontSize: 13 }}>ປະຫວັດໃບສັ່ງຊື້</div>
           <div style={{ color: C.textDim, fontSize: 12 }}>{supplyOrders.length} ໃບສັ່ງຊື້</div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 120px 110px 120px", minWidth: 760, padding: "12px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase", background: C.card2 }}>
-          <span>ໃບສັ່ງ</span><span>ຜູ້ສະໜອງ</span><span>ພະນັກງານ</span><span>ວັນທີ</span><span>ລວມ</span><span>ຈັດການ</span>
+        <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 120px 130px 110px 190px", minWidth: 960, padding: "12px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase", background: C.card2 }}>
+          <span>ໃບສັ່ງ</span><span>ຜູ້ສະໜອງ</span><span>ພະນັກງານ</span><span>ວັນທີ</span><span>Status</span><span>ລວມ</span><span>ຈັດການ</span>
         </div>
         <div style={{ overflowX: "auto" }}>
           {supplyOrders.map((order) => {
             const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
             return (
-              <div key={order.id} style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 120px 110px 120px", minWidth: 760, padding: "13px 16px", gap: 10, alignItems: "center", borderTop: `1px solid ${C.border}` }}>
+              <div key={order.id} style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 120px 130px 110px 190px", minWidth: 960, padding: "13px 16px", gap: 10, alignItems: "center", borderTop: `1px solid ${C.border}` }}>
                 <span style={{ color: C.text, fontWeight: 700 }}>#{order.id}</span>
                 <span style={{ color: C.text }}>{order.supplierName}</span>
                 <span style={{ color: C.textDim, fontSize: 12 }}>{order.staffName}</span>
                 <span style={{ color: C.textDim, fontSize: 12 }}>{order.orderDate ? new Date(order.orderDate).toLocaleDateString("en-US") : "—"}</span>
+                <span style={{ color: order.status === "waiting_stock" ? C.gold : C.green, fontSize: 12, fontWeight: 700 }}>{orderStatusLabel(order.status)}</span>
                 <span style={{ color: C.gold, fontWeight: 700 }}>{kip(order.totalAmount)}</span>
-                <Btn variant="secondary" onClick={() => printSupplyOrderBill(order, details)}>
-                  <Printer size={14} /> ພິມ
-                </Btn>
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  {order.status === "waiting_stock" && (
+                    <Btn variant="secondary" onClick={() => openReceiveOrder(order, details)}>
+                      <Check size={14} /> ກວດ
+                    </Btn>
+                  )}
+                  <Btn variant="secondary" onClick={() => printSupplyOrderBill(order, details)}>
+                    <Printer size={14} /> ພິມ
+                  </Btn>
+                </div>
               </div>
             );
           })}
           {supplyOrders.length === 0 && (
-            <div style={{ padding: 18, color: C.textDim, fontSize: 13 }}>ຍັງບໍ່ມີໃບສັ່ງຊື້. ໃຊ້ “ຮັບເຂົ້າ” ໃນວັດຖຸດິບເພື່ອສ້າງ.</div>
+            <div style={{ padding: 18, color: C.textDim, fontSize: 13 }}>ຍັງບໍ່ມີໃບສັ່ງຊື້.</div>
           )}
         </div>
       </div>

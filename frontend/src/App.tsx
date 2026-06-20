@@ -90,6 +90,26 @@ const readStoredUser = (): AuthUser | null => {
 const roleLabel = (role?: string | null) =>
   role === "manager" ? "ຜູ້ຈັດການ" : "ພະນັກງານ";
 
+const getApiErrorInfo = (err: unknown) => {
+  const maybeError = err as {
+    response?: {
+      status?: number;
+      data?: {
+        error?: string;
+        message?: string;
+      };
+    };
+  };
+
+  return {
+    status: maybeError.response?.status,
+    message:
+      maybeError.response?.data?.error ??
+      maybeError.response?.data?.message ??
+      "",
+  };
+};
+
 export default function App() {
   const [view, setView] = useState<string>("dashboard");
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -122,16 +142,8 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() =>
     readStoredUser(),
   );
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
-  const [registerForm, setRegisterForm] = useState({
-    name: "",
-    username: "",
-    password: "",
-    phone: "",
-  });
   const [loginError, setLoginError] = useState("");
-  const [authNotice, setAuthNotice] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const paymentLocks = useRef(new Set<string>());
   const isAdmin = currentUser?.role === "manager";
@@ -249,7 +261,6 @@ export default function App() {
 
     setLoginLoading(true);
     setLoginError("");
-    setAuthNotice("");
 
     try {
       const result = await apiClient.auth.login({ username, password });
@@ -262,7 +273,6 @@ export default function App() {
       setCurrentUser(user);
       window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
       setLoginForm({ username: "", password: "" });
-      setRegisterForm({ name: "", username: "", password: "", phone: "" });
     } catch (err) {
       console.error("Login failed", err);
       setLoginError("ຊື່ຜູ້ໃຊ້ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ.");
@@ -520,45 +530,6 @@ export default function App() {
       console.error("Create table failed", err);
       toast("ສ້າງໂຕະບໍ່ສຳເລັດ", "error");
       throw err;
-    }
-  };
-
-  const submitRegister = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const name = registerForm.name.trim();
-    const username = registerForm.username.trim();
-    const password = registerForm.password;
-
-    if (!name || !username || !password) {
-      setLoginError("ໃສ່ຊື່, ຊື່ຜູ້ໃຊ້ ແລະ ລະຫັດຜ່ານ.");
-      return;
-    }
-
-    if (password.length < 4) {
-      setLoginError("ລະຫັດຜ່ານຕ້ອງມີຢ່າງໜ້ອຍ 4 ຕົວອັກສອນ.");
-      return;
-    }
-
-    setLoginLoading(true);
-    setLoginError("");
-    setAuthNotice("");
-
-    try {
-      await apiClient.auth.register({
-        name,
-        username,
-        password,
-        phone: registerForm.phone.trim(),
-      });
-      setAuthMode("login");
-      setLoginForm({ username, password: "" });
-      setRegisterForm({ name: "", username: "", password: "", phone: "" });
-      setAuthNotice("ສ້າງບັນຊີພະນັກງານແລ້ວ. ເຂົ້າລະບົບດ້ວຍລະຫັດຜ່ານຂອງທ່ານ.");
-    } catch (err: any) {
-      console.error("Register failed", err);
-      setLoginError(err?.response?.data?.error ?? "ສ້າງບັນຊີພະນັກງານບໍ່ສຳເລັດ.");
-    } finally {
-      setLoginLoading(false);
     }
   };
 
@@ -1199,49 +1170,101 @@ export default function App() {
   const submitReceive = async () => {
     if (!modal?.data) return;
     const data = modal.data;
-    if (!data.qty || Number(data.qty) <= 0) {
-      toast("ໃສ່ຈຳນວນ", "error");
-      return;
-    }
     try {
-      const response = await apiClient.stock.receive(data.id, {
-        qty: data.qty,
-        costPrice: data.costPrice ?? data.costPerUnit ?? 0,
-        supplierId: data.supplierId ?? null,
-        staffId: staff.some((item) => item.id === currentUser?.id)
-          ? currentUser?.id
-          : staff[0]?.id ?? currentUser?.id ?? null,
-        remark: data.remark ?? "",
-      });
-      const nextCur = Number(response.data.cur ?? Number(data.cur) + Number(data.qty));
-      const nextCost = parseCurrency(response.data.costPrice ?? data.costPrice ?? data.costPerUnit ?? 0);
-      const nextSupplierId = response.data.supplierId ?? data.supplierId ?? null;
-      const supplierName = suppliers.find((supplier) => supplier.id === Number(nextSupplierId))?.name ?? data.supplierName ?? null;
+      const staffId = staff.some((item) => item.id === currentUser?.id)
+        ? currentUser?.id
+        : staff[0]?.id ?? currentUser?.id ?? null;
 
-      setStock((p) =>
-        p.map((s) =>
-          s.id === data.id
-            ? {
-                ...s,
-                cur: nextCur,
-                costPerUnit: nextCost,
-                supplierId: nextSupplierId === null ? null : Number(nextSupplierId),
-                supplierName,
-              }
-            : s,
-        ),
+      if (data.mode === "create") {
+        if (!isAdmin) {
+          toast("ສຳລັບຜູ້ຈັດການເທົ່ານັ້ນ", "error");
+          return;
+        }
+
+        const items = (data.items ?? []).map((item: any) => ({
+          ingredientId: item.ingredientId,
+          supplierId: item.supplierId,
+          quantity: Number(item.qty),
+          unitPrice: parseCurrency(item.unitPrice),
+        }));
+        const invalidItem = items.some(
+          (item: any) =>
+            !item.ingredientId ||
+            !item.supplierId ||
+            !Number.isFinite(item.quantity) ||
+            item.quantity <= 0 ||
+            !Number.isFinite(item.unitPrice) ||
+            item.unitPrice < 0,
+        );
+
+        if (items.length === 0 || invalidItem) {
+          toast("ໃສ່ລາຍການ, ຈຳນວນ, ລາຄາ ແລະ ຜູ້ສະໜອງ", "error");
+          return;
+        }
+
+        await apiClient.supplyOrders.createList({ staffId, items });
+        const [orders, orderDetails] = await Promise.all([
+          apiClient.supplyOrders.getAll(),
+          apiClient.supplyOrderDetails.getAll(),
+        ]);
+        setSupplyOrders(orders);
+        setSupplyOrderDetails(orderDetails);
+        toast("ຢືນຢັນລາຍການແລ້ວ: waiting for stock", "success");
+        setModal(null);
+        return;
+      }
+
+      const checkedItems = (data.items ?? []).map((item: any) => ({
+        detailId: item.detailId,
+        ingredientId: item.ingredientId,
+        receivedQuantity: Number(item.receivedQuantity),
+        actualUnitPrice: parseCurrency(item.actualUnitPrice),
+      }));
+      const invalidCheckedItem = checkedItems.some(
+        (item: any) =>
+          !item.detailId ||
+          !item.ingredientId ||
+          !Number.isFinite(item.receivedQuantity) ||
+          item.receivedQuantity < 0 ||
+          !Number.isFinite(item.actualUnitPrice) ||
+          item.actualUnitPrice < 0,
       );
-      const [orders, orderDetails] = await Promise.all([
+
+      if (!data.orderId || checkedItems.length === 0 || invalidCheckedItem) {
+        toast("ກວດຈຳນວນ ແລະ ລາຄາກ່ອນ", "error");
+        return;
+      }
+
+      await apiClient.supplyOrders.receive(Number(data.orderId), {
+        staffId,
+        items: checkedItems,
+      });
+      const [nextStock, orders, orderDetails] = await Promise.all([
+        apiClient.stock.getAll(),
         apiClient.supplyOrders.getAll(),
         apiClient.supplyOrderDetails.getAll(),
       ]);
+      setStock(nextStock);
       setSupplyOrders(orders);
       setSupplyOrderDetails(orderDetails);
-      toast(`ເພີ່ມ ${data.qty} ${data.unit} ສຳເລັດ`, "success");
+      toast("ກວດແລ້ວ ເພີ່ມເຂົ້າຄັງແລ້ວ", "success");
       setModal(null);
     } catch (err) {
       console.error("Receive stock failed", err);
-      toast("ຜິດພາດ", "error");
+      const apiError = getApiErrorInfo(err);
+
+      if (apiError.status === 401) {
+        toast("Login expired. Please log in again.", "error");
+        logout();
+        return;
+      }
+
+      if (apiError.status === 403) {
+        toast("Admin only. Log in as admin to confirm.", "error");
+        return;
+      }
+
+      toast(apiError.message || "ຜິດພາດ", "error");
     }
   };
 
@@ -1619,70 +1642,24 @@ export default function App() {
   }
 
   if (!currentUser) {
-    const isRegistering = authMode === "register";
-
     return (
       <div className="login-page">
-        <form className="login-panel" onSubmit={isRegistering ? submitRegister : submitLogin}>
+        <form className="login-panel" onSubmit={submitLogin}>
           <div className="login-logo">
             <ChefHat size={24} color={C.gold} />
           </div>
           <div className="login-kicker">ໂອເລ້ເຂົ້າຊອຍ</div>
-          <div className="login-title">{isRegistering ? "ລົງທະບຽນພະນັກງານ" : "ເຂົ້າລະບົບພະນັກງານ"}</div>
-          <div className="login-tabs" aria-label="ໂໝດການເຂົ້າລະບົບ">
-            <button
-              type="button"
-              className={!isRegistering ? "login-tab login-tab--active" : "login-tab"}
-              onClick={() => {
-                setAuthMode("login");
-                setLoginError("");
-                setAuthNotice("");
-              }}
-            >
-              ເຂົ້າລະບົບ
-            </button>
-            <button
-              type="button"
-              className={isRegistering ? "login-tab login-tab--active" : "login-tab"}
-              onClick={() => {
-                setAuthMode("register");
-                setLoginError("");
-                setAuthNotice("");
-              }}
-            >
-              ລົງທະບຽນ
-            </button>
-          </div>
-          {isRegistering && (
-            <label className="login-field">
-              <span>ຊື່ເຕັມ</span>
-              <input
-                autoFocus
-                value={registerForm.name}
-                onChange={(e) =>
-                  setRegisterForm((current) => ({
-                    ...current,
-                    name: e.target.value,
-                  }))
-                }
-              />
-            </label>
-          )}
+          <div className="login-title">ເຂົ້າລະບົບພະນັກງານ</div>
           <label className="login-field">
             <span>ຊື່ຜູ້ໃຊ້</span>
             <input
-              autoFocus={!isRegistering}
-              value={isRegistering ? registerForm.username : loginForm.username}
+              autoFocus
+              value={loginForm.username}
               onChange={(e) =>
-                isRegistering
-                  ? setRegisterForm((current) => ({
-                      ...current,
-                      username: e.target.value,
-                    }))
-                  : setLoginForm((current) => ({
-                      ...current,
-                      username: e.target.value,
-                    }))
+                setLoginForm((current) => ({
+                  ...current,
+                  username: e.target.value,
+                }))
               }
             />
           </label>
@@ -1690,46 +1667,19 @@ export default function App() {
             <span>ລະຫັດຜ່ານ</span>
             <input
               type="password"
-              autoComplete={isRegistering ? "new-password" : "current-password"}
-              value={isRegistering ? registerForm.password : loginForm.password}
+              autoComplete="current-password"
+              value={loginForm.password}
               onChange={(e) =>
-                isRegistering
-                  ? setRegisterForm((current) => ({
-                      ...current,
-                      password: e.target.value,
-                    }))
-                  : setLoginForm((current) => ({
-                      ...current,
-                      password: e.target.value,
-                    }))
+                setLoginForm((current) => ({
+                  ...current,
+                  password: e.target.value,
+                }))
               }
             />
           </label>
-          {isRegistering && (
-            <label className="login-field">
-              <span>ເບີໂທ</span>
-              <input
-                value={registerForm.phone}
-                onChange={(e) =>
-                  setRegisterForm((current) => ({
-                    ...current,
-                    phone: e.target.value,
-                  }))
-                }
-                placeholder="ບໍ່ບັງຄັບ"
-              />
-            </label>
-          )}
-          {authNotice && <div className="login-notice">{authNotice}</div>}
           {loginError && <div className="login-error">{loginError}</div>}
           <button className="login-submit" type="submit" disabled={loginLoading}>
-            {loginLoading
-              ? isRegistering
-                ? "ກໍາລັງສ້າງບັນຊີ..."
-                : "ກໍາລັງເຂົ້າລະບົບ..."
-              : isRegistering
-                ? "ສ້າງບັນຊີພະນັກງານ"
-                : "ເຂົ້າລະບົບ"}
+            {loginLoading ? "ກໍາລັງເຂົ້າລະບົບ..." : "ເຂົ້າລະບົບ"}
           </button>
         </form>
       </div>
@@ -1977,6 +1927,7 @@ export default function App() {
           {view === "stock" && (
             <StockView
               stock={searchedStock}
+              suppliers={suppliers}
               supplyOrders={supplyOrders}
               supplyOrderDetails={supplyOrderDetails}
               stockFilter={stockFilter}
@@ -2093,6 +2044,8 @@ export default function App() {
           setField={setField}
           submitReceive={submitReceive}
           suppliers={suppliers}
+          stock={stock}
+          isAdmin={isAdmin}
         />
       )}
 

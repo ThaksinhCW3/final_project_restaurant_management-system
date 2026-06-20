@@ -113,6 +113,8 @@ type SupplyOrderDetailRow = {
   ingredient_name?: string | null;
   quantity?: string | number;
   unit_price?: string | number;
+  received_quantity?: string | number | null;
+  actual_unit_price?: string | number | null;
 };
 
 type IngredientRow = {
@@ -264,6 +266,27 @@ type SupplierCreateInput = {
   supplier_name?: string;
   phone?: string | null;
   address?: string | null;
+};
+
+type SupplyOrderListInput = {
+  staffId?: number | string | null;
+  items: Array<{
+    ingredientId: number | string;
+    supplierId: number | string;
+    quantity: number | string;
+    unitPrice: number | string;
+  }>;
+};
+
+type SupplyOrderReceiveInput = {
+  staffId?: number | string | null;
+  items: Array<{
+    detailId: number | string;
+    ingredientId: number | string;
+    receivedQuantity: number | string;
+    actualUnitPrice: number | string;
+  }>;
+  remark?: string;
 };
 
 type RecipeCreateInput = {
@@ -472,6 +495,14 @@ const normalizeSupplyOrderDetail = (row: SupplyOrderDetailRow): SupplyOrderDetai
   ingredientName: row.ingredient_name ?? "Ingredient",
   quantity: toNumber(row.quantity, 0),
   unitPrice: toNumber(row.unit_price, 0),
+  receivedQuantity:
+    row.received_quantity === null || row.received_quantity === undefined
+      ? null
+      : toNumber(row.received_quantity, 0),
+  actualUnitPrice:
+    row.actual_unit_price === null || row.actual_unit_price === undefined
+      ? null
+      : toNumber(row.actual_unit_price, 0),
 });
 
 const normalizeIngredient = (row: IngredientRow): IngredientItem => ({
@@ -636,18 +667,6 @@ export const apiClient = {
       const response = await API.post<LoginResponse>("/staffs/login", data);
       return response.data;
     },
-    register: async (data: { name: string; username: string; password: string; phone?: string | null }) => {
-      const parts = data.name.trim().split(/\s+/).filter(Boolean);
-      const response = await API.post("/staffs/register", {
-        first_name: parts[0] ?? "",
-        last_name: parts.slice(1).join(" "),
-        role: "employee",
-        username: data.username,
-        password: data.password,
-        phone: data.phone ?? "",
-      });
-      return response.data;
-    },
   },
 
   menus: {
@@ -774,6 +793,25 @@ export const apiClient = {
       const response = await API.get<SupplyOrderRow[]>("/supplier-orders");
       return response.data.map(normalizeSupplyOrder);
     },
+    createList: (data: SupplyOrderListInput) => API.post("/supplier-orders/list", {
+      staff_id: data.staffId === "" || data.staffId == null ? null : Number(data.staffId),
+      items: data.items.map((item) => ({
+        ingredient_id: Number(item.ingredientId),
+        supplier_id: Number(item.supplierId),
+        quantity: Number(item.quantity),
+        unit_price: parseCurrency(item.unitPrice),
+      })),
+    }),
+    receive: (id: number, data: SupplyOrderReceiveInput) => API.post(`/supplier-orders/${id}/receive`, {
+      staff_id: data.staffId === "" || data.staffId == null ? null : Number(data.staffId),
+      remark: data.remark ?? "",
+      items: data.items.map((item) => ({
+        detail_id: Number(item.detailId),
+        ingredient_id: Number(item.ingredientId),
+        received_quantity: Number(item.receivedQuantity),
+        actual_unit_price: parseCurrency(item.actualUnitPrice),
+      })),
+    }),
   },
 
   supplyOrderDetails: {

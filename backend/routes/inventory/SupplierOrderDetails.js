@@ -11,7 +11,9 @@ module.exports = (pool) => {
                 supply_order_details.ingredient_id,
                 ingredients.ingredient_name,
                 supply_order_details.quantity,
-                supply_order_details.unit_price
+                supply_order_details.unit_price,
+                supply_order_details.received_quantity,
+                supply_order_details.actual_unit_price
             FROM supply_order_details
             LEFT JOIN supply_orders ON supply_order_details.supply_order_id = supply_orders.supply_order_id
             LEFT JOIN ingredients ON supply_order_details.ingredient_id = ingredients.ingredient_id
