@@ -464,12 +464,13 @@ export default function App() {
       await saveSessionItems(sessionId, items);
     } catch (err) {
       console.error("Save session items failed", err);
+      const apiError = getApiErrorInfo(err);
       setSessions((prev) =>
         prev.map((item) =>
           item.id === sessionId ? { ...item, items: session.items } : item,
         ),
       );
-      toast("ບັນທຶກລາຍການບິນບໍ່ສຳເລັດ", "error");
+      toast(apiError.message || "ບັນທຶກລາຍການບິນບໍ່ສຳເລັດ", "error");
     }
   };
 
@@ -495,12 +496,13 @@ export default function App() {
       await saveSessionItems(sessionId, items);
     } catch (err) {
       console.error("Save session items failed", err);
+      const apiError = getApiErrorInfo(err);
       setSessions((prev) =>
         prev.map((item) =>
           item.id === sessionId ? { ...item, items: session.items } : item,
         ),
       );
-      toast("ບັນທຶກລາຍການບິນບໍ່ສຳເລັດ", "error");
+      toast(apiError.message || "ບັນທຶກລາຍການບິນບໍ່ສຳເລັດ", "error");
     }
   };
 
@@ -1383,6 +1385,8 @@ export default function App() {
         status: "Completed",
         endedAt: new Date().toISOString(),
       });
+      const nextStock = await apiClient.stock.getAll();
+      setStock(nextStock);
       setSessions((p) => p.filter((x) => x.id !== id));
       await refreshTables();
       if (selSession === id) setSelSession(null);
@@ -1391,8 +1395,9 @@ export default function App() {
       toast(`ຊໍາລະ ${id} ສຳເລັດ`, "success");
     } catch (err) {
       console.error("Payment failed", err);
+      const apiError = getApiErrorInfo(err);
       paymentLocks.current.delete(id);
-      toast("ຜິດພາດ", "error");
+      toast(apiError.message || "ຊໍາລະບໍ່ສໍາເລັດ", "error");
     }
   };
 

@@ -1,5 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const {
+    findShortages,
+    getStockRequirements,
+    normalizeItems,
+    stockShortagePayload,
+} = require('../../utils/recipeStock');
 
 const toMysqlDateTime = (value) => {
     if (!value) return null;
@@ -174,6 +180,7 @@ module.exports = (pool) => {
     router.put('/:id/items', (req, res) => {
         const { id } = req.params;
         const items = Array.isArray(req.body.items) ? req.body.items : [];
+        const cleaned = normalizeItems(items);
 
         if (!Number.isInteger(Number(id))) {
             return res.status(400).json({ message: 'Invalid service session id' });
@@ -195,51 +202,67 @@ module.exports = (pool) => {
                     });
                 };
 
-                connection.query('SELECT order_id, status FROM orders WHERE session_id = ? ORDER BY order_id LIMIT 1', [id], (selectErr, orders) => {
-                    if (selectErr) return rollback(selectErr);
+                const rollbackWith = (statusCode, payload) => {
+                    connection.rollback(() => {
+                        connection.release();
+                        res.status(statusCode).json(payload);
+                    });
+                };
 
-                    const saveItems = (orderId) => {
-                        connection.query('DELETE FROM order_items WHERE order_id = ?', [orderId], (deleteErr) => {
-                            if (deleteErr) return rollback(deleteErr);
+                const saveValidatedItems = () => {
+                    connection.query('SELECT order_id, status FROM orders WHERE session_id = ? ORDER BY order_id LIMIT 1', [id], (selectErr, orders) => {
+                        if (selectErr) return rollback(selectErr);
 
-                            const cleaned = items
-                                .map((item) => [Number(item.menu_id ?? item.menuId ?? item.id), Number(item.quantity ?? item.qty)])
-                                .filter(([menuId, quantity]) => Number.isInteger(menuId) && Number.isFinite(quantity) && quantity > 0);
+                        const saveItems = (orderId) => {
+                            connection.query('DELETE FROM order_items WHERE order_id = ?', [orderId], (deleteErr) => {
+                                if (deleteErr) return rollback(deleteErr);
 
-                            if (cleaned.length === 0) {
-                                return connection.commit((commitErr) => {
-                                    connection.release();
-                                    if (commitErr) return res.status(500).json({ error: commitErr.message });
-                                    res.json({ message: 'Session items saved successfully!', order_id: orderId, items: [] });
-                                });
-                            }
+                                if (cleaned.length === 0) {
+                                    return connection.commit((commitErr) => {
+                                        connection.release();
+                                        if (commitErr) return res.status(500).json({ error: commitErr.message });
+                                        res.json({ message: 'Session items saved successfully!', order_id: orderId, items: [] });
+                                    });
+                                }
 
-                            const values = cleaned.map(([menuId, quantity]) => [orderId, menuId, quantity]);
-                            connection.query('INSERT INTO order_items (order_id, menu_id, quantity) VALUES ?', [values], (insertErr) => {
-                                if (insertErr) return rollback(insertErr);
+                                const values = cleaned.map((item) => [orderId, item.menuId, item.quantity]);
+                                connection.query('INSERT INTO order_items (order_id, menu_id, quantity) VALUES ?', [values], (insertErr) => {
+                                    if (insertErr) return rollback(insertErr);
 
-                                connection.commit((commitErr) => {
-                                    connection.release();
-                                    if (commitErr) return res.status(500).json({ error: commitErr.message });
-                                    res.json({
-                                        message: 'Session items saved successfully!',
-                                        order_id: orderId,
-                                        items: cleaned.map(([menuId, quantity]) => ({ menu_id: menuId, quantity })),
+                                    connection.commit((commitErr) => {
+                                        connection.release();
+                                        if (commitErr) return res.status(500).json({ error: commitErr.message });
+                                        res.json({
+                                            message: 'Session items saved successfully!',
+                                            order_id: orderId,
+                                            items: cleaned.map((item) => ({ menu_id: item.menuId, quantity: item.quantity })),
+                                        });
                                     });
                                 });
                             });
-                        });
-                    };
+                        };
 
-                    if (orders.length > 0) {
-                        saveItems(orders[0].order_id);
-                        return;
+                        if (orders.length > 0) {
+                            saveItems(orders[0].order_id);
+                            return;
+                        }
+
+                        connection.query('INSERT INTO orders (session_id, staff_id, status) VALUES (?, ?, ?)', [id, null, 'Pending'], (insertOrderErr, result) => {
+                            if (insertOrderErr) return rollback(insertOrderErr);
+                            saveItems(result.insertId);
+                        });
+                    });
+                };
+
+                getStockRequirements(connection, cleaned, (stockErr, requirements) => {
+                    if (stockErr) return rollback(stockErr);
+
+                    const shortages = findShortages(requirements);
+                    if (shortages.length > 0) {
+                        return rollbackWith(409, stockShortagePayload(shortages));
                     }
 
-                    connection.query('INSERT INTO orders (session_id, staff_id, status) VALUES (?, ?, ?)', [id, null, 'Pending'], (insertOrderErr, result) => {
-                        if (insertOrderErr) return rollback(insertOrderErr);
-                        saveItems(result.insertId);
-                    });
+                    saveValidatedItems();
                 });
             });
         });
