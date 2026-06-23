@@ -1,8 +1,8 @@
 // src/views/POS.tsx
 import { useState, type FormEvent } from "react";
-import { Check, CreditCard, ExternalLink, Minus, Plus, Printer, QrCode, Trash2, X } from "lucide-react";
-import { BILL_URL, C, kip } from "../config/constants";
-import type { MenuItem, SessionItem, TableItem } from "../types";
+import { Check, CreditCard, ExternalLink, Minus, Pencil, Plus, Printer, QrCode, Trash2, X } from "lucide-react";
+import { BILL_URL, C, kip, parseCurrency } from "../config/constants";
+import type { MenuItem, MenuOptionGroup, MenuOptionValue, SessionItem, TableItem } from "../types";
 import { printOrderBill } from "../utils/printOrderBill";
 
 const sessionTotal = (session: SessionItem, menu: MenuItem[]): number =>
@@ -10,6 +10,34 @@ const sessionTotal = (session: SessionItem, menu: MenuItem[]): number =>
     const menuItem = menu.find(entry => entry.id === item.id);
     return sum + (menuItem ? menuItem.price * item.qty : 0);
   }, 0);
+
+type SelectedOptions = Record<string, Array<string | number>>;
+
+const optionKey = (group: MenuOptionGroup) => String(group.id ?? group.name);
+const optionValueKey = (value: MenuOptionValue) => value.id ?? value.name;
+const optionPriceDelta = (value: MenuOptionValue) => parseCurrency(value.priceDelta || 0);
+const parseOptionTokens = (optionPart: string) =>
+  optionPart
+    .split(/\s*(?:;|,\s)\s*/)
+    .map(part => part.trim())
+    .filter(Boolean);
+const optionTokenMatches = (token: string, groupName: string, valueName: string) => {
+  const prefix = `${groupName}: ${valueName}`;
+
+  return token === prefix || token.startsWith(`${prefix} +`);
+};
+
+const buildDefaultOptions = (item: MenuItem): SelectedOptions => {
+  const nextOptions: SelectedOptions = {};
+
+  (item.optionGroups ?? []).forEach((group) => {
+    if (group.selectionType === "single" && group.values?.[0]) {
+      nextOptions[optionKey(group)] = [optionValueKey(group.values[0])];
+    }
+  });
+
+  return nextOptions;
+};
 
 interface POSProps {
   tables: TableItem[];
@@ -26,7 +54,9 @@ interface POSProps {
   showQr: (session: SessionItem) => void;
   addItem: (sessionId: string, menuId: number, quantity?: number, note?: string) => void | Promise<void>;
   rmItem: (sessionId: string, menuId: number, note?: string) => void | Promise<void>;
+  updateItem: (sessionId: string, menuId: number, previousNote: string, quantity: number, nextNote?: string) => void | Promise<void>;
   requestPayment: (sessionId: string) => void | Promise<void>;
+  confirmOrderReceived: (sessionId: string) => void | Promise<void>;
   confirmPayment: (sessionId: string) => void | Promise<void>;
   cancelSession: (sessionId: string) => void;
 }
@@ -46,7 +76,9 @@ export default function POS({
   showQr,
   addItem,
   rmItem,
+  updateItem,
   requestPayment,
+  confirmOrderReceived,
   confirmPayment,
   cancelSession,
 }: POSProps) {
@@ -55,7 +87,13 @@ export default function POS({
   const [showTableForm, setShowTableForm] = useState(false);
   const [savingTable, setSavingTable] = useState(false);
   const [billPanelOpen, setBillPanelOpen] = useState(true);
+  const [tableEditMode, setTableEditMode] = useState(false);
   const [tableFilter, setTableFilter] = useState<"all" | "occupied" | "active" | "payment" | "free">("all");
+  const [selectedAddMenu, setSelectedAddMenu] = useState<MenuItem | null>(null);
+  const [editingItem, setEditingItem] = useState<{ menuId: number; note: string; qty: number } | null>(null);
+  const [addQty, setAddQty] = useState(1);
+  const [addOptions, setAddOptions] = useState<SelectedOptions>({});
+  const [addNote, setAddNote] = useState("");
   const selectedSession = selectedSessionId ? sessions.find(session => session.id === selectedSessionId) : null;
   const tableSessionId = (table: TableItem): string | null =>
     table.sessionId ? `B${String(table.sessionId).padStart(3, "0")}` : null;
@@ -106,6 +144,108 @@ export default function POS({
       <span>{item.emoji || "ມ"}</span>
     )
   );
+  const isOptionSelected = (group: MenuOptionGroup, value: MenuOptionValue) =>
+    (addOptions[optionKey(group)] ?? []).includes(optionValueKey(value));
+  const toggleOption = (group: MenuOptionGroup, value: MenuOptionValue) => {
+    const groupKey = optionKey(group);
+    const valueKey = optionValueKey(value);
+
+    setAddOptions((current) => {
+      const currentValues = current[groupKey] ?? [];
+
+      if (group.selectionType === "multiple") {
+        return {
+          ...current,
+          [groupKey]: currentValues.includes(valueKey)
+            ? currentValues.filter((item) => item !== valueKey)
+            : [...currentValues, valueKey],
+        };
+      }
+
+      return { ...current, [groupKey]: [valueKey] };
+    });
+  };
+  const selectedOptionValues = selectedAddMenu
+    ? (selectedAddMenu.optionGroups ?? []).flatMap((group) =>
+        (group.values ?? [])
+          .filter((value) => isOptionSelected(group, value))
+          .map((value) => ({
+            groupName: group.name,
+            valueName: value.name,
+            priceDelta: optionPriceDelta(value),
+          })),
+      )
+    : [];
+  const addOptionTotal = selectedOptionValues.reduce((sum, option) => sum + option.priceDelta, 0);
+  const addUnitPrice = (selectedAddMenu?.price ?? 0) + addOptionTotal;
+  const addTotal = addUnitPrice * addQty;
+  const parseItemNoteForEdit = (item: MenuItem, note: string) => {
+    const noteParts = String(note ?? "")
+      .split("|")
+      .map(part => part.trim())
+      .filter(Boolean);
+    const optionPart = noteParts[0] ?? "";
+    const optionTokens = parseOptionTokens(optionPart);
+    const nextOptions = buildDefaultOptions(item);
+    let hasMatchedOption = false;
+
+    (item.optionGroups ?? []).forEach((group) => {
+      const matchedValues = (group.values ?? []).filter((value) => {
+        const match = optionTokens.some(token => optionTokenMatches(token, group.name, value.name));
+        if (match) hasMatchedOption = true;
+        return match;
+      });
+
+      if (matchedValues.length > 0) {
+        nextOptions[optionKey(group)] = matchedValues.map(optionValueKey);
+      }
+    });
+
+    const freeNote = hasMatchedOption ? noteParts.slice(1).join(" | ") : noteParts.join(" | ");
+
+    return { options: nextOptions, note: freeNote };
+  };
+  const openAddMenuDetail = (item: MenuItem) => {
+    setSelectedAddMenu(item);
+    setEditingItem(null);
+    setAddQty(1);
+    setAddOptions(buildDefaultOptions(item));
+    setAddNote("");
+  };
+  const openEditMenuDetail = (menuItem: MenuItem, item: { id: number; qty: number; note?: string | null }) => {
+    const cleanNote = String(item.note ?? "").trim();
+    const parsed = parseItemNoteForEdit(menuItem, cleanNote);
+
+    setShowAddItems(true);
+    setSelectedAddMenu(menuItem);
+    setEditingItem({ menuId: item.id, note: cleanNote, qty: item.qty });
+    setAddQty(Math.max(1, item.qty));
+    setAddOptions(parsed.options);
+    setAddNote(parsed.note);
+  };
+  const closeAddItems = () => {
+    setShowAddItems(false);
+    setSelectedAddMenu(null);
+    setEditingItem(null);
+    setAddQty(1);
+    setAddOptions({});
+    setAddNote("");
+  };
+  const submitAddMenuItem = () => {
+    if (!selectedSession || !selectedAddMenu) return;
+
+    const optionNote = selectedOptionValues
+      .map((option) => `${option.groupName}: ${option.valueName}${option.priceDelta > 0 ? ` + ${kip(option.priceDelta)}` : ""}`)
+      .join(" ; ");
+    const note = [optionNote, addNote.trim()].filter(Boolean).join(" | ");
+
+    if (editingItem) {
+      void updateItem(selectedSession.id, selectedAddMenu.id, editingItem.note, addQty, note);
+    } else {
+      void addItem(selectedSession.id, selectedAddMenu.id, addQty, note);
+    }
+    closeAddItems();
+  };
   const submitTable = async (event: FormEvent) => {
     event.preventDefault();
     if (savingTable) return;
@@ -142,8 +282,16 @@ export default function POS({
           </div>
           <div className="pos-toolbar-spacer" />
           <button
+            onClick={() => setTableEditMode((editing) => !editing)}
+            className={`pos-toolbar-action ${tableEditMode ? "is-active" : ""}`}
+            type="button"
+            aria-pressed={tableEditMode}
+          >
+            <Pencil size={13} /> {tableEditMode ? "ປິດແກ້ໄຂ" : "ແກ້ໄຂ"}
+          </button>
+          <button
             onClick={() => setBillPanelOpen((open) => !open)}
-            className={`pos-panel-toggle ${billPanelOpen ? "is-open" : ""}`}
+            className={`pos-toolbar-action ${billPanelOpen ? "is-active" : ""}`}
             type="button"
             aria-pressed={billPanelOpen}
           >
@@ -154,19 +302,22 @@ export default function POS({
               setTableForm((prev) => ({ ...prev, tableNumber: prev.tableNumber || String(nextTableNumber) }));
               setShowTableForm((prev) => !prev);
             }}
-            style={{ display: "flex", alignItems: "center", gap: 6, background: C.card, border: `1px solid ${C.border}`, color: C.text, padding: "7px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12 }}
+            className={`pos-toolbar-action ${showTableForm ? "is-active" : ""}`}
+            type="button"
+            aria-pressed={showTableForm}
           >
             <Plus size={13} /> ເພີ່ມໂຕະ
           </button>
           <button
             onClick={createBill}
-            style={{ display: "flex", alignItems: "center", gap: 6, background: C.goldDim, border: `1px solid ${C.borderMid}`, color: C.gold, padding: "7px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12 }}
+            className="pos-toolbar-action is-primary"
+            type="button"
           >
             <QrCode size={13} /> ສ້າງ QR
           </button>
         </div>
 
-        {showTableForm && (
+        <div className={`pos-table-form-wrap ${showTableForm ? "is-open" : ""}`} aria-hidden={!showTableForm}>
           <form
             onSubmit={submitTable}
             style={{ display: "grid", gridTemplateColumns: "minmax(110px,150px) minmax(90px,120px) minmax(120px,1fr) auto", gap: 10, alignItems: "end", background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, padding: 14, marginBottom: 16 }}
@@ -210,7 +361,7 @@ export default function POS({
               {savingTable ? "ກໍາລັງບັນທຶກ..." : "ບັນທຶກ"}
             </button>
           </form>
-        )}
+        </div>
 
         <div className="pos-table-grid">
           {filteredTables.map((table) => {
@@ -233,7 +384,7 @@ export default function POS({
                   }
                 }}
               >
-                {!occupied && (
+                {tableEditMode && !occupied && (
                   <button
                     type="button"
                     onClick={(event) => {
@@ -298,13 +449,19 @@ export default function POS({
 
                 return (
                   <div key={`${item.id}-${item.note ?? ""}`} className="pos-bill-item">
-                    <div className="pos-bill-thumb">{renderMenuThumb(menuItem)}</div>
-                    <div className="pos-bill-item-info">
-                      <strong>{menuItem.name}</strong>
-                      <small>{menuItem.cat}</small>
-                      {item.note && <small className="pos-bill-item-note">ໝາຍເຫດ: {item.note}</small>}
-                      <span>{kip(menuItem.price * item.qty)}</span>
-                    </div>
+                    <button
+                      type="button"
+                      className="pos-bill-item-edit"
+                      onClick={() => openEditMenuDetail(menuItem, item)}
+                    >
+                      <div className="pos-bill-thumb">{renderMenuThumb(menuItem)}</div>
+                      <div className="pos-bill-item-info">
+                        <strong>{menuItem.name}</strong>
+                        <small>{menuItem.cat}</small>
+                        {item.note && <small className="pos-bill-item-note">ໝາຍເຫດ: {item.note}</small>}
+                        <span>{kip(menuItem.price * item.qty)}</span>
+                      </div>
+                    </button>
                     <div className="pos-bill-qty">
                       <button onClick={() => rmItem(selectedSession.id, item.id, item.note ?? "")}><Minus size={13} /></button>
                       <span>{item.qty}</span>
@@ -315,31 +472,29 @@ export default function POS({
               })}
             </div>
 
-            {showAddItems && (
-              <div style={{ borderTop: `1px solid ${C.border}`, padding: "12px 16px", maxHeight: 185, overflow: "auto" }}>
-                <div style={{ fontSize: 11, color: C.textMid, marginBottom: 8 }}>ເພີ່ມເມນູ:</div>
-                {addMenu.filter(item => item.ok).map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => addItem(selectedSession.id, item.id)}
-                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", padding: "8px 12px", background: C.card2, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 6, cursor: "pointer", textAlign: "left", color: C.text }}
-                  >
-                    <span style={{ fontSize: 13 }}>{item.emoji} {item.name}</span>
-                    <span style={{ fontSize: 12, color: C.gold }}>{kip(item.price)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
             <div className="pos-bill-footer">
               <div className="pos-bill-total">
                 <span>ລວມ</span>
                 <strong>{kip(sessionTotal(selectedSession, menu))}</strong>
               </div>
               <div className="pos-bill-footer-actions">
-                <button className="pos-bill-add-more" onClick={() => setShowAddItems(!showAddItems)}>{showAddItems ? "ປິດ" : "+ ເພີ່ມລາຍການ"}</button>
-                {selectedSession.status === "active" ? (
-                  <button className="pos-bill-pay" onClick={() => requestPayment(selectedSession.id)}><CreditCard size={14} /> ຊໍາລະ</button>
+                <button className="pos-bill-add-more" onClick={() => setShowAddItems(true)}>+ ເພີ່ມລາຍການ</button>
+                {selectedSession.status === "active" && selectedSession.orderStatus !== "ready" ? (
+                  <button
+                    className="pos-bill-pay is-confirm"
+                    disabled={!selectedSession.orderStatus || selectedSession.items.length === 0}
+                    onClick={() => confirmOrderReceived(selectedSession.id)}
+                  >
+                    <Check size={14} /> ຢືນຢັນອໍເດີ
+                  </button>
+                ) : selectedSession.status === "active" ? (
+                  <button
+                    className="pos-bill-pay"
+                    disabled={selectedSession.items.length === 0}
+                    onClick={() => requestPayment(selectedSession.id)}
+                  >
+                    <CreditCard size={14} /> ຂໍຊໍາລະ
+                  </button>
                 ) : (
                   <button className="pos-bill-pay is-confirm" onClick={() => confirmPayment(selectedSession.id)}>ຢືນຢັນ</button>
                 )}
@@ -353,6 +508,121 @@ export default function POS({
           </div>
         )}
       </div>
+
+      {showAddItems && selectedSession && (
+        <div className="pos-add-overlay" role="dialog" aria-modal="true" aria-label="ເພີ່ມລາຍການເມນູ">
+          <button type="button" className="pos-add-scrim" onClick={closeAddItems} aria-label="ປິດ" />
+          {!selectedAddMenu ? (
+            <section className="pos-add-menu-modal">
+              <div className="pos-add-head">
+                <div>
+                  <span>ລາຍການເມນູ</span>
+                  <strong>{selectedSession.id}</strong>
+                </div>
+                <button type="button" onClick={closeAddItems} aria-label="ປິດ"><X size={18} /></button>
+              </div>
+              <div className="pos-add-menu-grid">
+                {addMenu.filter(item => item.ok).map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="pos-add-menu-card"
+                    onClick={() => openAddMenuDetail(item)}
+                  >
+                    <div className="pos-add-menu-image">{renderMenuThumb(item)}</div>
+                    <strong>{item.name}</strong>
+                    <small>{item.cat}</small>
+                    <span>{kip(item.price)}</span>
+                    <em><Plus size={14} /></em>
+                  </button>
+                ))}
+                {addMenu.filter(item => item.ok).length === 0 && (
+                  <div className="pos-add-empty">ບໍ່ມີເມນູທີ່ເປີດຂາຍ</div>
+                )}
+              </div>
+            </section>
+          ) : (
+            <section className="pos-add-detail-modal">
+              <button
+                type="button"
+                className="pos-add-detail-close"
+                onClick={() => (editingItem ? closeAddItems() : setSelectedAddMenu(null))}
+                aria-label="ປິດ"
+              >
+                <X size={20} />
+              </button>
+              <div className="pos-add-detail-image">{renderMenuThumb(selectedAddMenu)}</div>
+              <div className="pos-add-detail-body">
+                <div className="pos-add-detail-main">
+                  <div className="pos-add-detail-meta">
+                    <span>{selectedAddMenu.cat}</span>
+                    <strong>{kip(selectedAddMenu.price)}</strong>
+                  </div>
+                  {editingItem && <div className="pos-add-edit-state">ກໍາລັງແກ້ໄຂລາຍການໃນບິນ</div>}
+                  <h3>{selectedAddMenu.name}</h3>
+                  {selectedAddMenu.en && selectedAddMenu.en !== selectedAddMenu.name && (
+                    <p>{selectedAddMenu.en}</p>
+                  )}
+                  <label className="pos-add-note">
+                    <span>ໝາຍເຫດ</span>
+                    <textarea
+                      value={addNote}
+                      onChange={(event) => setAddNote(event.target.value)}
+                      placeholder="ຕົວຢ່າງ: ແພ້ຖົ່ວ, ບໍ່ໃສ່ຫອມ"
+                      maxLength={255}
+                    />
+                  </label>
+                </div>
+                <div className="pos-add-detail-options">
+                  {(selectedAddMenu.optionGroups ?? []).map((group) => (
+                    <div key={optionKey(group)} className="pos-add-option-group">
+                      <div className="pos-add-option-head">
+                        <span>{group.name}</span>
+                        <small>
+                          {group.selectionType === "multiple" ? "ເລືອກໄດ້ຫຼາຍ" : "ເລືອກໜຶ່ງຢ່າງ"}
+                          {group.required ? " · ຈໍາເປັນ" : ""}
+                        </small>
+                      </div>
+                      <div className="pos-add-option-values">
+                        {(group.values ?? []).map((value) => {
+                          const selected = isOptionSelected(group, value);
+
+                          return (
+                            <button
+                              key={String(optionValueKey(value))}
+                              type="button"
+                              className={selected ? "is-selected" : ""}
+                              onClick={() => toggleOption(group, value)}
+                            >
+                              <span>{value.name}</span>
+                              {optionPriceDelta(value) > 0 && <small>+ {kip(optionPriceDelta(value))}</small>}
+                              {selected && <Check size={13} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  {(selectedAddMenu.optionGroups ?? []).length === 0 && (
+                    <div className="pos-add-empty">ເມນູນີ້ບໍ່ມີຕົວເລືອກ</div>
+                  )}
+                </div>
+              </div>
+              <div className="pos-add-detail-bar">
+                <div className="pos-add-stepper">
+                  <button type="button" disabled={addQty <= 1} onClick={() => setAddQty((qty) => Math.max(1, qty - 1))}><Minus size={16} /></button>
+                  <span>{addQty}</span>
+                  <button type="button" onClick={() => setAddQty((qty) => qty + 1)}><Plus size={16} /></button>
+                </div>
+                <span className="pos-add-divider" />
+                <button type="button" className="pos-add-submit" onClick={submitAddMenuItem}>
+                  {editingItem ? "ອັບເດດລາຍການ" : "ເພີ່ມໃສ່ບິນ"} <span>|</span> {kip(addTotal)}
+                </button>
+              </div>
+            </section>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -124,6 +124,7 @@ export interface SaleItem {
   time: string;
   date: string;
   sessionId?: number | null;
+  orders?: OrderItem[];
 }
 
 export interface SessionOrder {

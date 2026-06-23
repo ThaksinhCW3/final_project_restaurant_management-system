@@ -5,5 +5,6 @@ export type AppModalState =
       data: any;
       msg?: string;
       onConfirm?: () => void;
+      onCancel?: () => void;
     }
   | null;

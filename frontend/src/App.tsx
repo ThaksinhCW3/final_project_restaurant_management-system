@@ -38,7 +38,6 @@ import CustomerPage from "./views/CustomerPage";
 import {
   MenuView,
   ReportsView,
-  SalesHistoryView,
   StaffView,
   StockView,
 } from "./views/ManagementPages";
@@ -60,7 +59,7 @@ import type { AppModalState } from "./types/app";
 import { apiClient } from "./api/client";
 import "./index.css";
 import "./App.css";
-import logoImage from "./assets/logo/olaylogo.jpg"
+import logoImage from "./assets/logo/olaylogo.png"
 
 type Toast = { id: number; msg: string; type: "success" | "error" | "info" };
 type AuthUser = {
@@ -72,6 +71,49 @@ type AuthUser = {
 };
 
 const AUTH_STORAGE_KEY = "olay-auth-user";
+const CATEGORY_ORDER_STORAGE_KEY = "olay-category-order";
+const ORDER_EVENT_STORAGE_KEY = "olay-order-event";
+const MANAGER_ONLY_VIEWS = new Set(["dashboard", "stock", "reports", "staff"]);
+
+const getCategoryKey = (category: any): string =>
+  String(category.category_id ?? category.categoryId ?? category.id ?? "");
+
+const readCategoryOrder = (): string[] => {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const saved = window.localStorage.getItem(CATEGORY_ORDER_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveCategoryOrder = (order: string[]) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CATEGORY_ORDER_STORAGE_KEY, JSON.stringify(order));
+};
+
+const applyCategoryOrder = <T extends any>(items: T[]): T[] => {
+  const savedOrder = readCategoryOrder();
+  if (savedOrder.length === 0) return items;
+
+  const indexById = new Map(savedOrder.map((id, index) => [id, index]));
+  return [...items].sort((a, b) => {
+    const aIndex = indexById.get(getCategoryKey(a));
+    const bIndex = indexById.get(getCategoryKey(b));
+    if (aIndex === undefined && bIndex === undefined) return 0;
+    if (aIndex === undefined) return 1;
+    if (bIndex === undefined) return -1;
+    return aIndex - bIndex;
+  });
+};
+
+const orderSignature = (items: SessionItem["items"]) =>
+  items
+    .map((item) => `${item.id}:${item.qty}:${String(item.note ?? "").trim()}`)
+    .sort()
+    .join("|");
 
 const readStoredUser = (): AuthUser | null => {
   if (typeof window === "undefined") return null;
@@ -143,7 +185,17 @@ export default function App() {
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const paymentLocks = useRef(new Set<string>());
+  const submittedOrderSessionIds = useRef(new Set<string>());
+  const submittedOrderSignatures = useRef(new Map<string, string>());
   const isAdmin = currentUser?.role === "manager";
+  const canAccessView = (viewId: string) => isAdmin || !MANAGER_ONLY_VIEWS.has(viewId);
+
+  useEffect(() => {
+    if (currentUser && !canAccessView(view)) {
+      setView("pos");
+      setModal(null);
+    }
+  }, [currentUser, isAdmin, view]);
 
   const parseSessionId = (
     value: string | number | null | undefined,
@@ -200,15 +252,24 @@ export default function App() {
       if (tablesRes.status === "fulfilled") setTables(tablesRes.value || []);
       else console.error("Failed to load tables", tablesRes.reason);
 
-      if (sessionsRes.status === "fulfilled")
-        setSessions(sessionsRes.value || []);
-      else console.error("Failed to load sessions", sessionsRes.reason);
+      if (sessionsRes.status === "fulfilled") {
+        const loadedSessions = sessionsRes.value || [];
+        submittedOrderSessionIds.current = new Set(
+          loadedSessions.filter((session) => session.orderStatus).map((session) => session.id),
+        );
+        submittedOrderSignatures.current = new Map(
+          loadedSessions
+            .filter((session) => session.orderStatus)
+            .map((session) => [session.id, orderSignature(session.items)]),
+        );
+        setSessions(loadedSessions);
+      } else console.error("Failed to load sessions", sessionsRes.reason);
 
       if (salesRes.status === "fulfilled") setSales(salesRes.value || []);
       else console.error("Failed to load sales", salesRes.reason);
 
       if (categoriesRes.status === "fulfilled")
-        setCategories(categoriesRes.value || []);
+        setCategories(applyCategoryOrder(categoriesRes.value || []));
       else console.error("Failed to load categories", categoriesRes.reason);
 
       if (ingredientsRes.status === "fulfilled")
@@ -246,6 +307,112 @@ export default function App() {
     setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 4200);
   };
 
+  const showOrderToast = (kind: "new" | "update", label: string) => {
+    toast(
+      kind === "update"
+        ? `ອັບເດດອໍເດີຈາກ ${label}`
+        : `ອໍເດີໃໝ່ຈາກ ${label}`,
+      "info",
+    );
+  };
+
+  const emitOrderEvent = (kind: "new" | "update", session: SessionItem) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      ORDER_EVENT_STORAGE_KEY,
+      JSON.stringify({
+        id: `${session.id}-${Date.now()}`,
+        sessionId: session.id,
+        label: session.note || session.id,
+        kind,
+        at: Date.now(),
+      }),
+    );
+  };
+
+  useEffect(() => {
+    if (!currentUser) return;
+    if (typeof window !== "undefined" && (window.location.pathname === "/customer" || window.location.search.includes("bill="))) return;
+
+    const refreshOrderCache = async () => {
+      const [nextSessions, nextTables] = await Promise.all([
+        apiClient.sessions.getAll(),
+        apiClient.tables.getAll(),
+      ]);
+
+      nextSessions.forEach((session) => {
+        if (!session.orderStatus) return;
+        submittedOrderSessionIds.current.add(session.id);
+        submittedOrderSignatures.current.set(session.id, orderSignature(session.items));
+      });
+
+      setSessions(nextSessions);
+      setTables(nextTables);
+    };
+
+    const handleOrderStorage = (event: StorageEvent) => {
+      if (event.key !== ORDER_EVENT_STORAGE_KEY || !event.newValue) return;
+
+      try {
+        const payload = JSON.parse(event.newValue) as {
+          kind?: "new" | "update";
+          label?: string;
+        };
+
+        if (payload.kind !== "new" && payload.kind !== "update") return;
+        showOrderToast(payload.kind, payload.label || "ລູກຄ້າ");
+        void refreshOrderCache();
+      } catch {
+        // Ignore malformed cross-tab events.
+      }
+    };
+
+    window.addEventListener("storage", handleOrderStorage);
+
+    const pollSessions = async () => {
+      try {
+        const [nextSessions, nextTables] = await Promise.all([
+          apiClient.sessions.getAll(),
+          apiClient.tables.getAll(),
+        ]);
+
+        nextSessions.forEach((session) => {
+          if (!session.orderStatus) {
+            submittedOrderSessionIds.current.delete(session.id);
+            submittedOrderSignatures.current.delete(session.id);
+            return;
+          }
+
+          const nextSignature = orderSignature(session.items);
+          const previousSignature = submittedOrderSignatures.current.get(session.id);
+
+          if (!submittedOrderSessionIds.current.has(session.id)) {
+            submittedOrderSessionIds.current.add(session.id);
+            submittedOrderSignatures.current.set(session.id, nextSignature);
+            showOrderToast("new", session.note || session.id);
+            return;
+          }
+
+          if (previousSignature !== undefined && previousSignature !== nextSignature) {
+            submittedOrderSignatures.current.set(session.id, nextSignature);
+            showOrderToast("update", session.note || session.id);
+          }
+        });
+
+        setSessions(nextSessions);
+        setTables(nextTables);
+      } catch (err) {
+        console.error("Failed to refresh POS sessions", err);
+      }
+    };
+
+    const timer = window.setInterval(pollSessions, 3500);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("storage", handleOrderStorage);
+    };
+  }, [currentUser]);
+
   const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const username = loginForm.username.trim();
@@ -268,6 +435,7 @@ export default function App() {
 
       apiClient.auth.setToken(user.token);
       setCurrentUser(user);
+      setView(user.role === "manager" ? "dashboard" : "pos");
       window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
       setLoginForm({ username: "", password: "" });
     } catch (err) {
@@ -505,6 +673,51 @@ export default function App() {
     }
   };
 
+  const updateItem = async (
+    sessionId: string,
+    menuId: number,
+    previousNote: string,
+    quantity: number,
+    nextNote = "",
+  ) => {
+    const session = sessions.find((item) => item.id === sessionId);
+    if (!session || session.status === "pending_payment") return;
+
+    const cleanPreviousNote = String(previousNote ?? "").trim();
+    const cleanNextNote = String(nextNote ?? "").trim();
+    const safeQuantity = Math.max(1, Number(quantity) || 1);
+    const remainingItems = session.items.filter(
+      (item) => !(item.id === menuId && String(item.note ?? "").trim() === cleanPreviousNote),
+    );
+    const existingNext = remainingItems.find(
+      (item) => item.id === menuId && String(item.note ?? "").trim() === cleanNextNote,
+    );
+    const items = existingNext
+      ? remainingItems.map((item) =>
+          item.id === menuId && String(item.note ?? "").trim() === cleanNextNote
+            ? { ...item, qty: item.qty + safeQuantity, note: cleanNextNote }
+            : item,
+        )
+      : [...remainingItems, { id: menuId, qty: safeQuantity, note: cleanNextNote }];
+
+    setSessions((prev) =>
+      prev.map((item) => (item.id === sessionId ? { ...item, items } : item)),
+    );
+
+    try {
+      await saveSessionItems(sessionId, items);
+    } catch (err) {
+      console.error("Save session items failed", err);
+      const apiError = getApiErrorInfo(err);
+      setSessions((prev) =>
+        prev.map((item) =>
+          item.id === sessionId ? { ...item, items: session.items } : item,
+        ),
+      );
+      toast(apiError.message || "ບັນທຶກລາຍການບິນບໍ່ສຳເລັດ", "error");
+    }
+  };
+
   const showQr = (session: SessionItem) =>
     setModal({
       type: "qr-display",
@@ -534,16 +747,24 @@ export default function App() {
     }
   };
 
-  const deleteTable = async (id: number) => {
-    try {
-      await apiClient.tables.delete(id);
-      await refreshTables();
-      toast(`ລຶບໂຕະ ${id} ສຳເລັດ`, "success");
-    } catch (err) {
-      console.error("Delete table failed", err);
-      toast("ລຶບໂຕະບໍ່ສຳເລັດ", "error");
-    }
-  };
+  const deleteTable = (id: number) =>
+    setModal({
+      type: "confirm",
+      title: "ລຶບໂຕະ",
+      msg: `ຢືນຢັນລຶບໂຕະ ${id} ບໍ?`,
+      data: { id },
+      onConfirm: async () => {
+        try {
+          await apiClient.tables.delete(id);
+          await refreshTables();
+          toast(`ລຶບໂຕະ ${id} ສຳເລັດ`, "success");
+          setModal(null);
+        } catch (err) {
+          console.error("Delete table failed", err);
+          toast("ລຶບໂຕະບໍ່ສຳເລັດ", "error");
+        }
+      },
+    });
 
   const createBill = () => {
     const firstFreeTable = tables.find((table) => table.status === "free");
@@ -856,7 +1077,7 @@ export default function App() {
         category_name: savedName,
       };
 
-      setCategories((current) => [...current, category]);
+      setCategories((current) => applyCategoryOrder([...current, category]));
       setActiveCat(savedName);
       toast(`ເພີ່ມໝວດ «${savedName}»`);
       setModal(null);
@@ -921,25 +1142,54 @@ export default function App() {
     }
   };
 
-  const deleteCategory = async (id: number, name: string) => {
-    try {
-      await apiClient.categories.delete(id);
-      setCategories((current) =>
-        current.filter((category) => Number(category.category_id ?? category.categoryId ?? category.id) !== id),
-      );
-      setMenu((current) =>
-        current.map((item) =>
-          item.categoryId === id || item.cat === name
-            ? { ...item, categoryId: null, cat: "ບໍ່ມີໝວດ" }
-            : item,
-        ),
-      );
-      if (activeCat === name) setActiveCat("ທັງໝົດ");
-      toast(`ລົບໝວດ «${name}»`, "info");
-    } catch (err) {
-      console.error("Category delete failed", err);
-      toast("ຜິດພາດ", "error");
-    }
+  const reorderCategories = (dragId: number, targetId: number) => {
+    if (dragId === targetId) return;
+
+    setCategories((current) => {
+      const next = [...current];
+      const from = next.findIndex((category) => Number(getCategoryKey(category)) === dragId);
+      const to = next.findIndex((category) => Number(getCategoryKey(category)) === targetId);
+
+      if (from < 0 || to < 0) return current;
+
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      saveCategoryOrder(next.map(getCategoryKey).filter(Boolean));
+      return next;
+    });
+  };
+
+  const deleteCategory = (id: number, name: string) => {
+    const managerModal = modal;
+
+    setModal({
+      type: "confirm",
+      title: "ລຶບໝວດເມນູ",
+      msg: `ຢືນຢັນລຶບໝວດ «${name}» ບໍ?`,
+      data: { id },
+      onConfirm: async () => {
+        try {
+          await apiClient.categories.delete(id);
+          setCategories((current) =>
+            current.filter((category) => Number(category.category_id ?? category.categoryId ?? category.id) !== id),
+          );
+          setMenu((current) =>
+            current.map((item) =>
+              item.categoryId === id || item.cat === name
+                ? { ...item, categoryId: null, cat: "ບໍ່ມີໝວດ" }
+                : item,
+            ),
+          );
+          if (activeCat === name) setActiveCat("ທັງໝົດ");
+          toast(`ລົບໝວດ «${name}»`, "info");
+          setModal(managerModal?.type === "category-manager" ? managerModal : null);
+        } catch (err) {
+          console.error("Category delete failed", err);
+          toast("ຜິດພາດ", "error");
+        }
+      },
+      onCancel: () => setModal(managerModal?.type === "category-manager" ? managerModal : null),
+    });
   };
 
   const deleteMenu = (id: number, name: string) =>
@@ -1210,7 +1460,7 @@ export default function App() {
         ]);
         setSupplyOrders(orders);
         setSupplyOrderDetails(orderDetails);
-        toast("ຢືນຢັນລາຍການແລ້ວ: waiting for stock", "success");
+        toast("ຢືນຢັນລາຍການແລ້ວ: ລໍຖ້າຮັບເຂົ້າ", "success");
         setModal(null);
         return;
       }
@@ -1328,6 +1578,65 @@ export default function App() {
     toast(`ຂໍການຊໍາລະ ${id}`, "info");
   };
 
+  const setSessionOrderServed = async (id: string) => {
+    const session = sessions.find((x) => x.id === id);
+    const sessionNumericId = parseSessionId(id);
+    if (!session || sessionNumericId === null) return;
+
+    try {
+      const orders = await apiClient.orders.getAll();
+      const order = (orders as any[]).find(
+        (row) => (row.session_id ?? row.sessionId) === sessionNumericId,
+      );
+      const orderId = order?.order_id ?? order?.orderId;
+
+      if (orderId) {
+        await apiClient.orders.update(orderId, {
+          session_id: sessionNumericId,
+          staff_id: session.staffId ?? null,
+          status: "Served",
+        });
+      }
+
+      setSessions((p) =>
+        p.map((x) => (x.id === id ? { ...x, orderStatus: "ready" } : x)),
+      );
+      toast(`ຢືນຢັນອໍເດີ ${id} ແລ້ວ`, "success");
+    } catch (err) {
+      console.error("Confirm order received failed", err);
+      toast("ຢືນຢັນອໍເດີບໍ່ສຳເລັດ", "error");
+    }
+  };
+
+  const submitCustomerOrder = async (id: string, items: SessionItem["items"]) => {
+    const session = sessions.find((x) => x.id === id);
+    if (!session || session.status === "pending_payment") return;
+    const isUpdate = Boolean(session.orderStatus);
+
+    if (items.length === 0) {
+      toast("ກະຕ່າຍັງວ່າງ", "error");
+      return;
+    }
+
+    try {
+      await saveSessionItems(id, items);
+      setSessions((p) =>
+        p.map((x) =>
+          x.id === id ? { ...x, items, orderStatus: "pending" } : x,
+        ),
+      );
+      submittedOrderSessionIds.current.add(id);
+      submittedOrderSignatures.current.set(id, orderSignature(items));
+      emitOrderEvent(isUpdate ? "update" : "new", session);
+      toast("ຄົວໄດ້ຮັບອໍເດີແລ້ວ", "success");
+    } catch (err) {
+      console.error("Submit customer order failed", err);
+      const apiError = getApiErrorInfo(err);
+      toast(apiError.message || "ສັ່ງອາຫານບໍ່ສຳເລັດ", "error");
+      throw err;
+    }
+  };
+
   const confirmPayment = async (id: string) => {
     if (paymentLocks.current.has(id)) return;
 
@@ -1353,17 +1662,18 @@ export default function App() {
       const saleRecord = {
         id: uid(sales),
         table: session.id,
-        items: session.items.length,
+        items: session.items.reduce((sum, item) => sum + item.qty, 0),
         total,
         time: now(),
         date: today(),
         sessionId: sessionNumericId,
+        orders: session.items.map((item) => ({ ...item })),
       };
 
       if (!saleAlreadyExists) {
         await apiClient.sales.create({
           table: session.id,
-          items: session.items.length,
+          items: saleRecord.items,
           total,
           time: saleRecord.time,
           date: saleRecord.date,
@@ -1551,6 +1861,7 @@ export default function App() {
   ];
   const searchSuggestions = normalizedSearch
     ? suggestionSource
+        .filter((item) => canAccessView(item.view))
         .map((item) => {
           const haystack = item.terms.map((term) => String(term ?? "").toLowerCase());
           const starts = haystack.some((term) => term.startsWith(normalizedSearch));
@@ -1595,7 +1906,7 @@ export default function App() {
       : []),
   ].slice(0, 8);
   const notificationItems = generatedNotificationItems.filter(
-    (item) => !clearedNotificationIds.includes(item.id),
+    (item) => !clearedNotificationIds.includes(item.id) && canAccessView(item.view),
   );
 
   const navItems = [
@@ -1603,17 +1914,16 @@ export default function App() {
     { id: "pos", icon: ShoppingCart, label: "ຂາຍ" },
     { id: "menu", icon: Utensils, label: "ເມນູ" },
     { id: "stock", icon: Package, label: "ຄັງ" },
-    { id: "sales-history", icon: ShoppingCart, label: "ການຂາຍ" },
     { id: "reports", icon: BarChart2, label: "ລາຍງານ" },
     { id: "staff", icon: Users, label: "ພະນັກ" },
   ];
+  const visibleNavItems = navItems.filter((item) => canAccessView(item.id));
 
   const titles: Record<string, string> = {
     dashboard: "ພາບລວມ",
     pos: "ຈັດການໂຕະ",
     menu: "ເມນູ",
     stock: "ຄັງ",
-    "sales-history": "ປະຫວັດການຂາຍ",
     reports: "ລາຍງານ",
     staff: "ພະນັກ",
   };
@@ -1636,9 +1946,9 @@ export default function App() {
         session={customerSession ?? null}
         menu={menu}
         categories={categories}
-        addItem={addItem}
-        rmItem={rmItem}
+        submitOrder={submitCustomerOrder}
         requestPayment={requestPayment}
+        confirmOrderReceived={setSessionOrderServed}
       />
     );
   }
@@ -1710,7 +2020,7 @@ export default function App() {
           <div className="app-logo">
             <img src={logoImage} alt="OlayFood" />
           </div>
-          {navItems.map((n) => (
+          {visibleNavItems.map((n) => (
             <NavBtn
               key={n.id}
               icon={n.icon}
@@ -1894,13 +2204,12 @@ export default function App() {
               showQr={showQr}
               addItem={addItem}
               rmItem={rmItem}
+              updateItem={updateItem}
               requestPayment={requestPayment}
+              confirmOrderReceived={setSessionOrderServed}
               confirmPayment={confirmPayment}
               cancelSession={cancelSession}
             />
-          )}
-          {view === "sales-history" && (
-            <SalesHistoryView sales={searchedSales} />
           )}
           {view === "menu" && (
             <MenuView
@@ -1934,6 +2243,8 @@ export default function App() {
               ingredients={searchedIngredients}
               staff={searchedStaff}
               sessions={searchedSessions}
+              supplyOrders={supplyOrders}
+              supplyOrderDetails={supplyOrderDetails}
               revenueTotal={revenueTotal}
               activeBillsCount={activeBillsCount}
               pendingBillsCount={pendingBillsCount}
@@ -1993,6 +2304,7 @@ export default function App() {
           }
           updateCategory={updateCategory}
           deleteCategory={deleteCategory}
+          reorderCategories={reorderCategories}
         />
       )}
 

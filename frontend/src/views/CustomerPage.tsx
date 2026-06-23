@@ -1,7 +1,8 @@
-import { Bell, Check, CreditCard, Home, Minus, Percent, Plus, Receipt, Search, ShoppingBag, UserCircle, Utensils, X } from "lucide-react";
+import { Bell, Check, Home, Minus, Plus, Receipt, Search, ShoppingBag, Utensils, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { kip, parseCurrency } from "../config/constants";
 import type { MenuItem, MenuOptionGroup, MenuOptionValue, SessionItem } from "../types";
+import olayLogo from "../assets/logo/olaylogo.png";
 import "./CustomerPage.css";
 
 type CustomerPageProps = {
@@ -10,9 +11,9 @@ type CustomerPageProps = {
   session: SessionItem | null;
   menu: MenuItem[];
   categories: any[];
-  addItem: (sessionId: string, menuId: number, quantity?: number, note?: string) => void | Promise<void>;
-  rmItem: (sessionId: string, menuId: number, note?: string) => void | Promise<void>;
+  submitOrder: (sessionId: string, items: Array<{ id: number; qty: number; note?: string | null }>) => void | Promise<void>;
   requestPayment: (sessionId: string) => void | Promise<void>;
+  confirmOrderReceived: (sessionId: string) => void | Promise<void>;
 };
 
 type Tab = "home" | "menu" | "cart" | "offers" | "profile";
@@ -29,7 +30,25 @@ type CustomerCartLine = {
   unitPrice: number;
   options: CustomerCartOption[];
   note?: string;
+  serverNote?: string;
 };
+
+const parseOptionTokens = (optionPart: string) =>
+  optionPart
+    .split(/\s*(?:;|,\s)\s*/)
+    .map(part => part.trim())
+    .filter(Boolean);
+const optionTokenMatches = (token: string, groupName: string, valueName: string) => {
+  const prefix = `${groupName}: ${valueName}`;
+
+  return token === prefix || token.startsWith(`${prefix} +`);
+};
+
+const cartLineSignature = (lines: CustomerCartLine[]) =>
+  lines
+    .map((line) => `${line.menuId}:${line.qty}:${String(line.serverNote ?? line.note ?? "").trim()}`)
+    .sort()
+    .join("|");
 
 export default function CustomerPage({
   billId,
@@ -37,9 +56,9 @@ export default function CustomerPage({
   session,
   menu,
   categories,
-  addItem,
-  rmItem,
+  submitOrder,
   requestPayment,
+  confirmOrderReceived,
 }: CustomerPageProps) {
   const [tab, setTab] = useState<Tab>("home");
   const [search, setSearch] = useState("");
@@ -50,6 +69,11 @@ export default function CustomerPage({
   const [detailQty, setDetailQty] = useState(1);
   const [selectedOptions, setSelectedOptions] = useState<SelectedOptions>({});
   const [detailNote, setDetailNote] = useState("");
+  const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [orderNoticeOpen, setOrderNoticeOpen] = useState(false);
+  const [orderNoticeTitle, setOrderNoticeTitle] = useState("ຄົວໄດ້ຮັບອໍເດີແລ້ວ");
+  const [orderNoticeDetail, setOrderNoticeDetail] = useState("ກຳລັງຈັດກຽມອາຫານໃຫ້ທ່ານ");
+  const [cartDraftDirty, setCartDraftDirty] = useState(false);
   const [cartLines, setCartLines] = useState<CustomerCartLine[]>(() => {
     if (typeof window === "undefined") return [];
 
@@ -61,7 +85,9 @@ export default function CustomerPage({
     }
   });
   const waitingPayment = session?.status === "pending_payment";
-  const canOrder = Boolean(session && !waitingPayment);
+  const orderSubmitted = Boolean(session?.orderStatus || waitingPayment);
+  const orderReceived = session?.orderStatus === "ready" || waitingPayment;
+  const canOrder = Boolean(session && !waitingPayment && !orderReceived);
 
   const availableMenu = menu.filter((item) => item.ok !== false);
   const categoryNames = useMemo(
@@ -99,6 +125,46 @@ export default function CustomerPage({
     window.localStorage.setItem(`customer-cart-options:${billId}`, JSON.stringify(cartLines));
   }, [billId, cartLines]);
 
+  const optionKey = (group: MenuOptionGroup) => String(group.id ?? group.name);
+  const optionValueKey = (value: MenuOptionValue) => value.id ?? value.name;
+  const optionPriceDelta = (value: MenuOptionValue) => parseCurrency(value.priceDelta || 0);
+  const buildDefaultOptions = (item: MenuItem): SelectedOptions => {
+    const nextOptions: SelectedOptions = {};
+
+    (item.optionGroups ?? []).forEach((group) => {
+      if (group.selectionType === "single" && group.values?.[0]) {
+        nextOptions[optionKey(group)] = [optionValueKey(group.values[0])];
+      }
+    });
+
+    return nextOptions;
+  };
+  const parseSessionNote = (item: MenuItem, note: string) => {
+    const noteParts = String(note ?? "")
+      .split("|")
+      .map(part => part.trim())
+      .filter(Boolean);
+    const optionPart = noteParts[0] ?? "";
+    const optionTokens = parseOptionTokens(optionPart);
+    let hasMatchedOption = false;
+    const options = (item.optionGroups ?? []).flatMap((group) =>
+      (group.values ?? [])
+        .filter((value) => {
+          const match = optionTokens.some(token => optionTokenMatches(token, group.name, value.name));
+          if (match) hasMatchedOption = true;
+          return match;
+        })
+        .map((value) => ({
+          groupName: group.name,
+          valueName: value.name,
+          priceDelta: optionPriceDelta(value),
+        })),
+    );
+    const freeNote = hasMatchedOption ? noteParts.slice(1).join(" | ") : noteParts.join(" | ");
+
+    return { options, note: freeNote };
+  };
+
   const sessionMissing = loaded && Boolean(billId) && !session;
 
   useEffect(() => {
@@ -107,33 +173,42 @@ export default function CustomerPage({
   }, [billId, sessionMissing]);
 
   const sessionCartRows = session?.items ?? [];
-  const optionLineQtyByMenu = cartLines.reduce<Record<number, number>>((qtyByMenu, line) => {
-    qtyByMenu[line.menuId] = (qtyByMenu[line.menuId] ?? 0) + line.qty;
-    return qtyByMenu;
-  }, {});
-  const fallbackCartLines: CustomerCartLine[] = sessionCartRows
+  const sessionCartLines: CustomerCartLine[] = sessionCartRows
     .map((item) => {
-      const remainingQty = item.qty - (optionLineQtyByMenu[item.id] ?? 0);
       const menuItem = menu.find((entry) => entry.id === item.id);
+      const cleanNote = String(item.note ?? "").trim();
 
-      if (!menuItem || remainingQty <= 0) return null;
+      if (!menuItem || item.qty <= 0) return null;
+
+      const parsed = parseSessionNote(menuItem, cleanNote);
+      const optionSignature = parsed.options
+        .map((option) => `${option.groupName}:${option.valueName}:${option.priceDelta}`)
+        .sort()
+        .join("|");
+      const unitPrice = menuItem.price + parsed.options.reduce((sum, option) => sum + option.priceDelta, 0);
 
       return {
-        key: `base-${item.id}-${String(item.note ?? "").trim().toLowerCase() || "no-note"}`,
+        key: `${item.id}:${optionSignature || "base"}:${parsed.note.toLowerCase() || "no-note"}`,
         menuId: item.id,
-        qty: remainingQty,
-        unitPrice: menuItem.price,
-        options: [],
-        note: item.note ?? "",
+        qty: item.qty,
+        unitPrice,
+        options: parsed.options,
+        note: parsed.note,
+        serverNote: cleanNote,
       };
     })
     .filter(Boolean) as CustomerCartLine[];
-  const cartItems = [...cartLines, ...fallbackCartLines]
+  const hasPendingOrderUpdate =
+    orderSubmitted &&
+    cartDraftDirty &&
+    cartLineSignature(cartLines) !== cartLineSignature(sessionCartLines);
+  const displayCartLines = orderSubmitted && !cartDraftDirty ? sessionCartLines : cartLines;
+  const cartItems: Array<CustomerCartLine & { menuItem: MenuItem }> = displayCartLines
     .map((item) => ({
       ...item,
       menuItem: menu.find((entry) => entry.id === item.menuId),
     }))
-    .filter((item) => item.menuItem);
+    .filter((item): item is CustomerCartLine & { menuItem: MenuItem } => Boolean(item.menuItem));
   const cartCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
   const total = cartItems.reduce((sum, item) => sum + item.unitPrice * item.qty, 0);
 
@@ -143,11 +218,10 @@ export default function CustomerPage({
         <div className="customer-mobile-shell">
           <header className="customer-mobile-top customer-mobile-top--ended">
             <div className="customer-mobile-brand-row">
-              <div className="customer-mobile-logo">
-                <Utensils size={18} />
-                <span>ໂອເລຟູດ</span>
-              </div>
               <div className="customer-mobile-branch">{billId}</div>
+              <div className="customer-mobile-logo">
+                <img src={olayLogo} alt="Olay Food" />
+              </div>
             </div>
           </header>
 
@@ -164,21 +238,6 @@ export default function CustomerPage({
       </div>
     );
   }
-
-  const optionKey = (group: MenuOptionGroup) => String(group.id ?? group.name);
-  const optionValueKey = (value: MenuOptionValue) => value.id ?? value.name;
-  const optionPriceDelta = (value: MenuOptionValue) => parseCurrency(value.priceDelta || 0);
-  const buildDefaultOptions = (item: MenuItem): SelectedOptions => {
-    const nextOptions: SelectedOptions = {};
-
-    (item.optionGroups ?? []).forEach((group) => {
-      if (group.selectionType === "single" && group.values?.[0]) {
-        nextOptions[optionKey(group)] = [optionValueKey(group.values[0])];
-      }
-    });
-
-    return nextOptions;
-  };
 
   const openMenuDetail = (item: MenuItem) => {
     setEditingCartLineKey(null);
@@ -271,10 +330,11 @@ export default function CustomerPage({
         .sort()
         .join("|");
       const cleanNote = detailNote.trim();
+      const optionNote = selectedOptionValues
+        .map((option) => `${option.groupName}: ${option.valueName}${option.priceDelta > 0 ? ` + ${kip(option.priceDelta)}` : ""}`)
+        .join(" ; ");
+      const serverNote = [optionNote, cleanNote].filter(Boolean).join(" | ");
       const lineKey = `${selectedMenu.id}:${optionSignature || "base"}:${cleanNote.toLowerCase() || "no-note"}`;
-      const editingLine = editingCartLineKey
-        ? cartItems.find((line) => line.key === editingCartLineKey)
-        : null;
       const nextLine: CustomerCartLine = {
         key: lineKey,
         menuId: selectedMenu.id,
@@ -282,17 +342,20 @@ export default function CustomerPage({
         unitPrice: detailUnitPrice,
         options: selectedOptionValues,
         note: cleanNote,
+        serverNote,
       };
 
       setCartLines((current) => {
+        const source = orderSubmitted && !cartDraftDirty ? sessionCartLines : current;
+
         if (editingCartLineKey) {
-          const withoutEditing = current.filter((line) => line.key !== editingCartLineKey);
+          const withoutEditing = source.filter((line) => line.key !== editingCartLineKey);
           const existing = withoutEditing.find((line) => line.key === lineKey);
 
           if (existing) {
             return withoutEditing.map((line) =>
               line.key === lineKey
-                ? { ...line, qty: line.qty + detailQty, unitPrice: detailUnitPrice, options: selectedOptionValues, note: cleanNote }
+                ? { ...line, qty: line.qty + detailQty, unitPrice: detailUnitPrice, options: selectedOptionValues, note: cleanNote, serverNote }
                 : line,
             );
           }
@@ -300,27 +363,19 @@ export default function CustomerPage({
           return [...withoutEditing, nextLine];
         }
 
-        const existing = current.find((line) => line.key === lineKey);
+        const existing = source.find((line) => line.key === lineKey);
 
         if (existing) {
-          return current.map((line) =>
+          return source.map((line) =>
             line.key === lineKey
-              ? { ...line, qty: line.qty + detailQty, unitPrice: detailUnitPrice, options: selectedOptionValues, note: cleanNote }
+              ? { ...line, qty: line.qty + detailQty, unitPrice: detailUnitPrice, options: selectedOptionValues, note: cleanNote, serverNote }
               : line,
           );
         }
 
-        return [...current, nextLine];
+        return [...source, nextLine];
       });
-
-      const quantityDelta = editingLine ? detailQty - editingLine.qty : detailQty;
-      if (quantityDelta > 0) {
-        void addItem(session.id, selectedMenu.id, quantityDelta, cleanNote);
-      } else if (quantityDelta < 0) {
-        Array.from({ length: Math.abs(quantityDelta) }).forEach(() => {
-          void rmItem(session.id, selectedMenu.id, editingLine?.note ?? cleanNote);
-        });
-      }
+      if (orderSubmitted) setCartDraftDirty(true);
 
       closeMenuDetail();
       setTab("cart");
@@ -332,9 +387,11 @@ export default function CustomerPage({
     setCartLines((current) =>
       line.key.startsWith("base-")
         ? current
-        : current.map((item) => item.key === line.key ? { ...item, qty: item.qty + 1 } : item),
+        : (orderSubmitted && !cartDraftDirty ? sessionCartLines : current).map((item) => item.key === line.key ? { ...item, qty: item.qty + 1 } : item),
     );
-    void addItem(session.id, line.menuId, 1, line.note ?? "");
+    if (orderSubmitted) {
+      setCartDraftDirty(true);
+    }
   };
 
   const decreaseCartLine = (line: CustomerCartLine) => {
@@ -342,11 +399,37 @@ export default function CustomerPage({
     setCartLines((current) =>
       line.key.startsWith("base-")
         ? current
-        : current
+        : (orderSubmitted && !cartDraftDirty ? sessionCartLines : current)
             .map((item) => item.key === line.key ? { ...item, qty: item.qty - 1 } : item)
             .filter((item) => item.qty > 0),
     );
-          void rmItem(session.id, line.menuId, line.note ?? "");
+    if (orderSubmitted) {
+      setCartDraftDirty(true);
+    }
+  };
+
+  const submitCartOrder = async () => {
+    if (!session || cartItems.length === 0 || submittingOrder) return;
+
+    setSubmittingOrder(true);
+    const isUpdate = orderSubmitted;
+    try {
+      await submitOrder(
+        session.id,
+        cartItems.map((item) => ({
+          id: item.menuId,
+          qty: item.qty,
+          note: item.serverNote ?? item.note ?? "",
+        })),
+      );
+      setCartDraftDirty(false);
+      setOrderNoticeTitle(isUpdate ? "ອັບເດດອໍເດີແລ້ວ" : "ຄົວໄດ້ຮັບອໍເດີແລ້ວ");
+      setOrderNoticeDetail(isUpdate ? "ຄົວໄດ້ຮັບລາຍການເພີ່ມແລ້ວ" : "ກຳລັງຈັດກຽມອາຫານໃຫ້ທ່ານ");
+      setOrderNoticeOpen(true);
+      window.setTimeout(() => setOrderNoticeOpen(false), 1800);
+    } finally {
+      setSubmittingOrder(false);
+    }
   };
 
   const renderMenuImage = (item?: MenuItem) => (
@@ -358,11 +441,10 @@ export default function CustomerPage({
       <div className="customer-mobile-shell">
         <header className={tab === "cart" ? "customer-mobile-top customer-mobile-top--cart" : "customer-mobile-top"}>
           <div className="customer-mobile-brand-row">
-            <div className="customer-mobile-logo">
-              <Utensils size={20} />
-              <span>ໂອເລຟູດ</span>
-            </div>
             <div className="customer-mobile-branch">{session?.note || billId}</div>
+            <div className="customer-mobile-logo">
+              <img src={olayLogo} alt="Olay Food" />
+            </div>
             <button
               type="button"
               className="customer-mobile-bell"
@@ -462,29 +544,57 @@ export default function CustomerPage({
 
               <div className="customer-mobile-cart-spacer" />
 
-              <div className="customer-mobile-cart-head">
-                <div>
-                  <span>ກະຕ່າຂອງທ່ານ</span>
-                  <strong>{cartCount} ລາຍການ</strong>
+              <div className="customer-mobile-cart-footer">
+                <div className="customer-mobile-cart-head">
+                  <div>
+                    <span>ກະຕ່າຂອງທ່ານ</span>
+                    <strong>{cartCount} ລາຍການ</strong>
+                  </div>
+                  <div>{kip(total)}</div>
                 </div>
-                <div>{kip(total)}</div>
-              </div>
 
-              {waitingPayment ? (
-                <div className="customer-mobile-waiting">ກໍາລັງລໍພະນັກງານຢືນຢັນ</div>
-              ) : !session ? (
-                <div className="customer-mobile-waiting">ສະແກນ QR ຂອງໂຕະເພື່ອເລີ່ມສັ່ງອາຫານ.</div>
-              ) : (
-                <button
-                  type="button"
-                  className="customer-mobile-pay"
-                  disabled={cartItems.length === 0}
-                  onClick={() => requestPayment(session.id)}
-                >
-                  <CreditCard size={16} />
-                  ຂໍຊໍາລະ
-                </button>
-              )}
+                {waitingPayment ? (
+                  <div className="customer-mobile-waiting">ກໍາລັງລໍພະນັກງານຢືນຢັນ</div>
+                ) : !session ? (
+                  <div className="customer-mobile-waiting">ສະແກນ QR ຂອງໂຕະເພື່ອເລີ່ມສັ່ງອາຫານ.</div>
+                ) : orderReceived ? (
+                  <button
+                    type="button"
+                    className="customer-mobile-pay"
+                    disabled={cartItems.length === 0 || submittingOrder}
+                    onClick={() => requestPayment(session.id)}
+                  >
+                    <Receipt size={18} />
+                    ຂໍຊໍາລະ
+                  </button>
+              ) : orderSubmitted ? (
+                <div className="customer-order-actions">
+                  <button type="button" onClick={() => {
+                    setCartLines(sessionCartLines);
+                    setCartDraftDirty(false);
+                    setTab("menu");
+                  }}>
+                    ສັ່ງເພີ່ມ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => hasPendingOrderUpdate ? submitCartOrder() : confirmOrderReceived(session.id)}
+                  >
+                    {hasPendingOrderUpdate ? "ອັບເດດອໍເດີ" : "ໄດ້ຮັບແລ້ວ"}
+                  </button>
+                </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="customer-mobile-pay"
+                    disabled={cartItems.length === 0 || submittingOrder}
+                    onClick={submitCartOrder}
+                  >
+                    <Receipt size={18} />
+                    ສັ່ງອາຫານ
+                  </button>
+                )}
+              </div>
             </section>
           ) : tab === "offers" ? (
             <section className="customer-mobile-simple">
@@ -714,7 +824,7 @@ export default function CustomerPage({
 
               <div className="customer-detail-bar">
                 <div className="customer-detail-stepper">
-                  <button type="button" onClick={() => setDetailQty((qty) => Math.max(1, qty - 1))}>
+                  <button type="button" disabled={detailQty <= 1} onClick={() => setDetailQty((qty) => Math.max(1, qty - 1))}>
                     <Minus size={18} />
                   </button>
                   <span>{detailQty}</span>
@@ -749,15 +859,17 @@ export default function CustomerPage({
               </em>
             )}
           </button>
-          <button type="button" className={tab === "offers" ? "is-active" : ""} onClick={() => setTab("offers")}>
-            <Percent size={22} />
-            <span>ໂປຣໂມຊັນ</span>
-          </button>
-          <button type="button" className={tab === "profile" ? "is-active" : ""} onClick={() => setTab("profile")}>
-            <UserCircle size={22} />
-            <span>ໂປຣໄຟລ໌</span>
-          </button>
         </nav>
+
+        {orderNoticeOpen && (
+          <div className="customer-order-popup" role="status" aria-live="polite">
+            <div>
+              <Check size={28} />
+              <strong>{orderNoticeTitle}</strong>
+              <span>{orderNoticeDetail}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -620,7 +620,8 @@ const normalizeSale = (
 ): SaleItem => {
   const sessionId = row.sessionId ?? row.session_id ?? null;
   const session = sessionId ? sessionLookup.get(sessionId) : undefined;
-  const itemCount = sessionId ? sessionItems.get(sessionId)?.length ?? 0 : 0;
+  const orders = sessionId ? sessionItems.get(sessionId) ?? [] : [];
+  const itemCount = orders.reduce((sum, item) => sum + item.qty, 0);
   const tableLabel = session?.tableNumber ?? session?.table_number ? `Table ${session?.tableNumber ?? session?.table_number}` : sessionId ? sessionLabel(sessionId) : "Bill";
 
   return {
@@ -631,6 +632,7 @@ const normalizeSale = (
     time: formatTime(row.paidAt ?? row.paid_at),
     date: formatDate(row.paidAt ?? row.paid_at),
     sessionId,
+    orders,
   };
 };
 

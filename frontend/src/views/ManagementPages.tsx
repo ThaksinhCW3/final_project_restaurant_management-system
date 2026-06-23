@@ -6,7 +6,6 @@ import { BILL_URL, C, kip } from "../config/constants";
 import type { AppModalState } from "../types/app";
 import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, SupplierItem, SupplyOrderDetailItem, SupplyOrderItem } from "../types";
 import { printOrderBill } from "../utils/printOrderBill";
-import { printSupplyOrderBill } from "../utils/printSupplyOrderBill";
 
 type DispatchModal = Dispatch<SetStateAction<AppModalState>>;
 
@@ -78,7 +77,16 @@ export function BillingView({
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <Btn variant="secondary" onClick={() => openCustomerView(s.id)}><ExternalLink size={14} /> ເບິ່ງ</Btn>
                 <Btn variant="secondary" onClick={() => printOrderBill(s, menu)}><Printer size={14} /> ພິມ</Btn>
-                {!pending && <Btn variant="secondary" onClick={() => requestPayment(s.id)}>ຂໍການຊໍາລະ</Btn>}
+                {!pending && (
+                  <Btn
+                    variant="secondary"
+                    disabled={!s.orderStatus || s.items.length === 0}
+                    style={!s.orderStatus || s.items.length === 0 ? { opacity: 0.52, cursor: "not-allowed" } : undefined}
+                    onClick={() => requestPayment(s.id)}
+                  >
+                    ຊໍາລະ
+                  </Btn>
+                )}
                 {pending && <Btn onClick={() => confirmPayment(s.id)}>ຊໍາລະ</Btn>}
                 <Btn variant="danger" onClick={() => cancelSession(s.id)}>ຍົກເລີກ</Btn>
               </div>
@@ -146,49 +154,7 @@ export function MenuView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
-        <div style={{ fontSize: 14, color: C.textMid }}>ເມນູທັງໝົດ</div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <Btn
-            variant="secondary"
-            onClick={() =>
-              setModal({
-                type: "category-manager",
-                title: "ໝວດເມນູ",
-                data: {},
-              })
-            }
-          >
-            <Pencil size={14} /> ຕັ້ງຄ່າໝວດ
-          </Btn>
-          <Btn
-            onClick={() =>
-              setModal({
-                type: "menu-form",
-                title: "ເພີ່ມເມນູ",
-                data: {
-                  name: "",
-                  en: "",
-                  price: "",
-                  cat:
-                    selectedCategory === "ທັງໝົດ"
-                      ? categoryNames[0] || ""
-                      : selectedCategory,
-                  emoji: "🍜",
-                  image: "",
-                  originalImage: "",
-                  ok: true,
-                  recipeItems: [],
-                  optionGroups: [],
-                },
-              })
-            }
-          >
-            <Plus size={14} /> ເພີ່ມເມນູ
-          </Btn>
-        </div>
-      </div>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {menuCategories.map((category) => {
@@ -272,9 +238,48 @@ export function MenuView({
             })}
           </div>
         </div>
-        <span style={{ color: C.textDim, fontSize: 12 }}>
-          {visibleMenu.length} ລາຍການ
-        </span>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", marginLeft: "auto" }}>
+          <button
+            type="button"
+            className="pos-toolbar-action"
+            onClick={() =>
+              setModal({
+                type: "category-manager",
+                title: "ໝວດເມນູ",
+                data: {},
+              })
+            }
+          >
+            <Pencil size={14} /> ຕັ້ງຄ່າໝວດ
+          </button>
+          <button
+            type="button"
+            className="pos-toolbar-action is-primary"
+            onClick={() =>
+              setModal({
+                type: "menu-form",
+                title: "ເພີ່ມເມນູ",
+                data: {
+                  name: "",
+                  en: "",
+                  price: "",
+                  cat:
+                    selectedCategory === "ທັງໝົດ"
+                      ? categoryNames[0] || ""
+                      : selectedCategory,
+                  emoji: "🍜",
+                  image: "",
+                  originalImage: "",
+                  ok: true,
+                  recipeItems: [],
+                  optionGroups: [],
+                },
+              })
+            }
+          >
+            <Plus size={14} /> ເພີ່ມເມນູ
+          </button>
+        </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 }}>
         {visibleMenu.map((item) => (
@@ -332,19 +337,17 @@ export function StockView({
   setModal: DispatchModal;
   deleteStock: (id: number, name: string) => void;
 }) {
-  const [stockTab, setStockTab] = useState<"ingredients" | "history">("ingredients");
   const visibleStock = stock.filter((r) => stockFilter === "all" || r.cur <= r.min);
   const lowStockCount = stock.filter((r) => r.cur <= r.min).length;
   const firstStock = stock[0];
-  const orderStatusLabel = (status: string) => {
-    if (status === "waiting_stock") return "Waiting for stock";
-    if (status === "completed") return "Completed";
-    return status || "Pending";
-  };
-  const openReceiveOrder = (order: SupplyOrderItem, details: SupplyOrderDetailItem[]) => {
+  const pendingSupplyOrders = supplyOrders.filter(
+    (order) => order.status === "pending" || order.status === "waiting_stock",
+  );
+  const openReceiveOrder = (order: SupplyOrderItem) => {
+    const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
     setModal({
       type: "stock-receive",
-      title: `ກວດສິນຄ້າ #${order.id}`,
+      title: `ກວດຮັບໃບສັ່ງ #${order.id}`,
       data: {
         mode: "receive",
         orderId: order.id,
@@ -448,13 +451,43 @@ export function StockView({
           </Btn>
         </div>
       </div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <button onClick={() => setStockTab("ingredients")} style={{ flex: 1, padding: "11px", borderRadius: 10, border: `1px solid ${stockTab === "ingredients" ? C.gold : C.border}`, background: stockTab === "ingredients" ? C.goldDim : C.card, color: stockTab === "ingredients" ? C.gold : C.text, fontWeight: 700, cursor: "pointer" }}>ວັດຖຸດິບ</button>
-        <button onClick={() => setStockTab("history")} style={{ flex: 1, padding: "11px", borderRadius: 10, border: `1px solid ${stockTab === "history" ? C.gold : C.border}`, background: stockTab === "history" ? C.goldDim : C.card, color: stockTab === "history" ? C.gold : C.text, fontWeight: 700, cursor: "pointer" }}>ປະຫວັດການນໍາເຂົ້າ</button>
-      </div>
-      {stockTab === "ingredients" && (
-        <>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      {pendingSupplyOrders.length > 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflow: "hidden" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>ລາຍການລໍຖ້າກວດຮັບ</div>
+            <div style={{ color: C.red, fontSize: 12 }}>{pendingSupplyOrders.length} ໃບສັ່ງ</div>
+          </div>
+          {pendingSupplyOrders.map((order) => {
+            const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
+            return (
+              <div
+                key={order.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "90px minmax(160px,1fr) minmax(180px,2fr) 130px 120px",
+                  gap: 12,
+                  alignItems: "center",
+                  padding: "14px 16px",
+                  borderTop: `1px solid ${C.border}`,
+                  minWidth: 760,
+                }}
+              >
+                <strong style={{ color: C.text }}>#{order.id}</strong>
+                <span style={{ color: C.text }}>{order.supplierName}</span>
+                <span style={{ color: C.textDim, fontSize: 12 }}>
+                  {details.map((detail) => `${detail.ingredientName} ${detail.quantity}`).join(", ") || "—"}
+                </span>
+                <strong style={{ color: C.red }}>{kip(order.totalAmount)}</strong>
+                <Btn onClick={() => openReceiveOrder(order)}>
+                  <Check size={14} /> ກວດຮັບ
+                </Btn>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <button onClick={() => setStockFilter("all")} style={chipStyle(stockFilter === "all")}>
               <span style={dotStyle(C.green)} />
               <span>ທັງໝົດ</span>
@@ -465,10 +498,10 @@ export function StockView({
               <span>ຕ່ຳ</span>
               <span style={countStyle(stockFilter === "low")}>{lowStockCount}</span>
             </button>
-          </div>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflowX: "auto", overflowY: "hidden" }}>
+        </div>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflowX: "auto", overflowY: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "64px 1fr 80px 70px 80px 120px 140px 1fr", padding: "14px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase", minWidth: 940 }}>
-          <span>ຮູບ</span><span>ສິນຄ້າ</span><span>ຫົວໜ່ວຍ</span><span>ຈຳນວນ</span><span>ຕ່ຳສຸດ</span><span>ຕົ້ນທຶນ</span><span>ຜູ້ສະໜອງ</span><span>ການຈັດການ</span>
+          <span>ຮູບ</span><span>ສິນຄ້າ</span><span>ຈຳນວນ</span><span>ຫົວໜ່ວຍ</span><span>ຕ່ຳສຸດ</span><span>ຕົ້ນທຶນ</span><span>ຜູ້ສະໜອງ</span><span>ການຈັດການ</span>
         </div>
         {visibleStock.map((r) => {
           const low = r.cur <= r.min;
@@ -482,8 +515,8 @@ export function StockView({
                 )}
               </div>
               <span style={{ fontSize: 13, color: C.text }}>{r.name}</span>
-              <span style={{ fontSize: 12, color: C.textDim }}>{r.unit}</span>
               <span style={{ fontSize: 14, fontWeight: 600, color: low ? C.red : C.text }}>{r.cur}</span>
+              <span style={{ fontSize: 12, color: C.textDim }}>{r.unit}</span>
               <span style={{ fontSize: 12, color: C.textDim }}>{r.min}</span>
               <span style={{ fontSize: 12, color: C.textDim }}>{kip(r.costPerUnit ?? 0)}</span>
               <span style={{ fontSize: 12, color: C.textDim }}>{r.supplierName || "—"}</span>
@@ -494,48 +527,8 @@ export function StockView({
             </div>
           );
         })}
-          </div>
-        </>
-      )}
-      {stockTab === "history" && (
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflow: "hidden" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ color: C.textMid, fontSize: 13 }}>ປະຫວັດໃບສັ່ງຊື້</div>
-          <div style={{ color: C.textDim, fontSize: 12 }}>{supplyOrders.length} ໃບສັ່ງຊື້</div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 120px 130px 110px 190px", minWidth: 960, padding: "12px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase", background: C.card2 }}>
-          <span>ໃບສັ່ງ</span><span>ຜູ້ສະໜອງ</span><span>ພະນັກງານ</span><span>ວັນທີ</span><span>Status</span><span>ລວມ</span><span>ຈັດການ</span>
-        </div>
-        <div style={{ overflowX: "auto" }}>
-          {supplyOrders.map((order) => {
-            const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
-            return (
-              <div key={order.id} style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 120px 130px 110px 190px", minWidth: 960, padding: "13px 16px", gap: 10, alignItems: "center", borderTop: `1px solid ${C.border}` }}>
-                <span style={{ color: C.text, fontWeight: 700 }}>#{order.id}</span>
-                <span style={{ color: C.text }}>{order.supplierName}</span>
-                <span style={{ color: C.textDim, fontSize: 12 }}>{order.staffName}</span>
-                <span style={{ color: C.textDim, fontSize: 12 }}>{order.orderDate ? new Date(order.orderDate).toLocaleDateString("en-US") : "—"}</span>
-                <span style={{ color: order.status === "waiting_stock" ? C.gold : C.green, fontSize: 12, fontWeight: 700 }}>{orderStatusLabel(order.status)}</span>
-                <span style={{ color: C.gold, fontWeight: 700 }}>{kip(order.totalAmount)}</span>
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                  {order.status === "waiting_stock" && (
-                    <Btn variant="secondary" onClick={() => openReceiveOrder(order, details)}>
-                      <Check size={14} /> ກວດ
-                    </Btn>
-                  )}
-                  <Btn variant="secondary" onClick={() => printSupplyOrderBill(order, details)}>
-                    <Printer size={14} /> ພິມ
-                  </Btn>
-                </div>
-              </div>
-            );
-          })}
-          {supplyOrders.length === 0 && (
-            <div style={{ padding: 18, color: C.textDim, fontSize: 13 }}>ຍັງບໍ່ມີໃບສັ່ງຊື້.</div>
-          )}
-        </div>
-      </div>
-      )}
+      </>
     </div>
   );
 }
@@ -547,6 +540,8 @@ export function ReportsView({
   ingredients,
   staff,
   sessions,
+  supplyOrders,
+  supplyOrderDetails,
   revenueTotal,
   activeBillsCount,
   pendingBillsCount,
@@ -557,18 +552,17 @@ export function ReportsView({
   ingredients: IngredientItem[];
   staff: StaffItem[];
   sessions: SessionItem[];
+  supplyOrders: SupplyOrderItem[];
+  supplyOrderDetails: SupplyOrderDetailItem[];
   revenueTotal: number;
   activeBillsCount: number;
   pendingBillsCount: number;
 }) {
   const [selectedReport, setSelectedReport] = useState("sales");
-  const menuQty = new Map<number, number>();
-  menu.forEach((item) => {
-    if (item.sold > 0) menuQty.set(item.id, item.sold);
-  });
-  sessions.forEach((session) => {
-    session.items.forEach((item) => {
-      menuQty.set(item.id, (menuQty.get(item.id) ?? 0) + item.qty);
+  const soldMenuQty = new Map<number, number>();
+  sales.forEach((sale) => {
+    (sale.orders ?? []).forEach((item) => {
+      soldMenuQty.set(item.id, (soldMenuQty.get(item.id) ?? 0) + item.qty);
     });
   });
 
@@ -591,14 +585,14 @@ export function ReportsView({
     .map((item) => ({
       ເມນູ: item.name,
       ໝວດ: item.cat,
-      ຈຳນວນ: menuQty.get(item.id) ?? 0,
-      ລາຍຮັບ: (menuQty.get(item.id) ?? 0) * item.price,
+      ຈຳນວນ: soldMenuQty.get(item.id) ?? 0,
+      ລາຍຮັບ: (soldMenuQty.get(item.id) ?? 0) * item.price,
     }))
     .sort((a, b) => b.ຈຳນວນ - a.ຈຳນວນ);
 
   const profitRows = menu
     .map((item) => {
-      const quantity = menuQty.get(item.id) ?? 0;
+      const quantity = soldMenuQty.get(item.id) ?? 0;
       const revenue = quantity * item.price;
       const cost = quantity * (recipeCostByMenu.get(item.id) ?? 0);
       return {
@@ -620,6 +614,52 @@ export function ReportsView({
     ສະຖານະ: ingredient.stockQuantity <= ingredient.minThreshold ? "ຕ່ຳ" : "ປົກກະຕິ",
   }));
 
+  const importHistoryRows = supplyOrders
+    .filter((order) => order.status === "completed")
+    .flatMap((order) => {
+    const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
+    const status =
+      order.status === "pending" || order.status === "waiting_stock"
+        ? "ລໍຖ້າຮັບເຂົ້າ"
+        : order.status === "completed"
+          ? "ສຳເລັດ"
+          : order.status === "cancelled"
+            ? "ຍົກເລີກ"
+          : order.status || "ລໍຖ້າ";
+
+    if (details.length === 0) {
+      return [{
+        ໃບສັ່ງ: `#${order.id}`,
+        ວັນທີ: order.orderDate ? new Date(order.orderDate).toLocaleDateString("en-US") : "—",
+        ຜູ້ສະໜອງ: order.supplierName,
+        ວັດຖຸດິບ: "—",
+        ສັ່ງ: 0,
+        ຮັບເຂົ້າ: 0,
+        "ລາຄາ/ຫົວໜ່ວຍ": 0,
+        ລວມ: order.totalAmount,
+        ພະນັກງານ: order.staffName,
+        ສະຖານະ: status,
+      }];
+    }
+
+    return details.map((detail) => {
+      const receivedQuantity = detail.receivedQuantity ?? 0;
+      const unitPrice = detail.actualUnitPrice ?? detail.unitPrice;
+      return {
+        ໃບສັ່ງ: `#${order.id}`,
+        ວັນທີ: order.orderDate ? new Date(order.orderDate).toLocaleDateString("en-US") : "—",
+        ຜູ້ສະໜອງ: order.supplierName,
+        ວັດຖຸດິບ: detail.ingredientName,
+        ສັ່ງ: detail.quantity,
+        ຮັບເຂົ້າ: receivedQuantity,
+        "ລາຄາ/ຫົວໜ່ວຍ": unitPrice,
+        ລວມ: receivedQuantity * unitPrice,
+        ພະນັກງານ: order.staffName,
+        ສະຖານະ: status,
+      };
+    });
+  });
+
   const staffShiftRows = staff.map((member) => {
     const active = sessions.filter((session) => session.staffId === member.id && session.status === "active").length;
     const pending = sessions.filter((session) => session.staffId === member.id && session.status === "pending_payment").length;
@@ -638,6 +678,7 @@ export function ReportsView({
     { id: "best-selling", title: "ເມນູຂາຍດີ", rows: bestSellingRows },
     { id: "profit", title: "ກໍາໄລ", rows: profitRows },
     { id: "ingredients", title: "ວັດຖຸດິບໃນຄັງ", rows: ingredientRows },
+    { id: "import-history", title: "ປະຫວັດການນໍາເຂົ້າ", rows: importHistoryRows },
     { id: "staff-shift", title: "ກະພະນັກງານ", rows: staffShiftRows },
   ];
   const activeReport = reportOptions.find((report) => report.id === selectedReport) ?? reportOptions[0];
@@ -687,6 +728,7 @@ export function ReportsView({
           ${renderExportTable("ເມນູຂາຍດີ", bestSellingRows)}
           ${renderExportTable("ກໍາໄລ", profitRows)}
           ${renderExportTable("ວັດຖຸດິບໃນຄັງ", ingredientRows)}
+          ${renderExportTable("ປະຫວັດການນໍາເຂົ້າ", importHistoryRows)}
           ${renderExportTable("ກະພະນັກງານ", staffShiftRows)}
         </body>
       </html>

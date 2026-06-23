@@ -111,7 +111,7 @@ module.exports = (pool) => {
                             (supplier_id, staff_id, total_amount, status)
                         VALUES (?, ?, ?, ?)
                     `,
-                    [supplierId, staffId, totalAmount, 'waiting_stock'],
+                    [supplierId, staffId, totalAmount, 'pending'],
                 );
                 const orderId = orderResult.insertId;
 
@@ -130,7 +130,7 @@ module.exports = (pool) => {
                     supply_order_id: orderId,
                     supplier_id: supplierId,
                     total_amount: totalAmount,
-                    status: 'waiting_stock',
+                    status: 'pending',
                 });
             }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { GripVertical, Plus, Trash2 } from "lucide-react";
 import type { AppModalState } from "../../types/app";
 import { Btn, Modal } from "../SharedUI";
 
@@ -18,7 +18,8 @@ type Props = {
   onClose: () => void;
   openAddCategory: () => void;
   updateCategory: (id: number, name: string) => Promise<void>;
-  deleteCategory: (id: number, name: string) => Promise<void>;
+  deleteCategory: (id: number, name: string) => void | Promise<void>;
+  reorderCategories: (dragId: number, targetId: number) => void;
 };
 
 const getCategoryId = (category: CategoryItem) =>
@@ -34,9 +35,11 @@ export default function CategoryManagerModal({
   openAddCategory,
   updateCategory,
   deleteCategory,
+  reorderCategories,
 }: Props) {
   const [names, setNames] = useState<Record<number, string>>({});
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [draggingId, setDraggingId] = useState<number | null>(null);
 
   useEffect(() => {
     const nextNames: Record<number, string> = {};
@@ -71,7 +74,38 @@ export default function CategoryManagerModal({
             const busy = busyId === id;
 
             return (
-              <div className="category-manager-row" key={id}>
+              <div
+                className={`category-manager-row ${draggingId === id ? "is-dragging" : ""}`}
+                key={id}
+                draggable={!busy}
+                onDragStart={(event) => {
+                  setDraggingId(id);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", String(id));
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const dragId = Number(event.dataTransfer.getData("text/plain") || draggingId);
+                  if (Number.isFinite(dragId)) {
+                    reorderCategories(dragId, id);
+                  }
+                  setDraggingId(null);
+                }}
+                onDragEnd={() => setDraggingId(null)}
+              >
+                <button
+                  type="button"
+                  className="category-manager-drag"
+                  disabled={busy}
+                  aria-label={`ລາກ ${originalName}`}
+                  title="ລາກເພື່ອຈັດລໍາດັບ"
+                >
+                  <GripVertical size={16} />
+                </button>
                 <input
                   value={name}
                   disabled={busy}
@@ -98,14 +132,7 @@ export default function CategoryManagerModal({
                   type="button"
                   disabled={busy}
                   className="category-manager-delete"
-                  onClick={async () => {
-                    setBusyId(id);
-                    try {
-                      await deleteCategory(id, originalName);
-                    } finally {
-                      setBusyId(null);
-                    }
-                  }}
+                  onClick={() => deleteCategory(id, originalName)}
                   aria-label={`ລຶບ ${originalName}`}
                 >
                   <Trash2 size={14} />
