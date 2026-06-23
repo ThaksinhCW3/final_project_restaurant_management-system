@@ -103,6 +103,7 @@ export interface RecipeItem {
 export interface OrderItem {
   id: number;
   qty: number;
+  note?: string | null;
 }
 
 export interface TableItem {
@@ -128,6 +129,7 @@ export interface SaleItem {
 export interface SessionOrder {
   id: number;
   qty: number;
+  note?: string | null;
 }
 
 export interface SessionItem {

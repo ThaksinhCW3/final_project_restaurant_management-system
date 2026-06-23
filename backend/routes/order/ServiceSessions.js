@@ -225,8 +225,8 @@ module.exports = (pool) => {
                                     });
                                 }
 
-                                const values = cleaned.map((item) => [orderId, item.menuId, item.quantity]);
-                                connection.query('INSERT INTO order_items (order_id, menu_id, quantity) VALUES ?', [values], (insertErr) => {
+                                const values = cleaned.map((item) => [orderId, item.menuId, item.quantity, item.note ?? '']);
+                                connection.query('INSERT INTO order_items (order_id, menu_id, quantity, note) VALUES ?', [values], (insertErr) => {
                                     if (insertErr) return rollback(insertErr);
 
                                     connection.commit((commitErr) => {
@@ -235,7 +235,7 @@ module.exports = (pool) => {
                                         res.json({
                                             message: 'Session items saved successfully!',
                                             order_id: orderId,
-                                            items: cleaned.map((item) => ({ menu_id: item.menuId, quantity: item.quantity })),
+                                            items: cleaned.map((item) => ({ menu_id: item.menuId, quantity: item.quantity, note: item.note ?? '' })),
                                         });
                                     });
                                 });

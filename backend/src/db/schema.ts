@@ -116,6 +116,7 @@ export const orderItems = mysqlTable("order_items", {
 	orderId: int("order_id").references(() => orders.orderId, { onDelete: "cascade" } ),
 	menuId: int("menu_id").references(() => menus.menuId, { onDelete: "restrict" } ),
 	quantity: int().notNull(),
+	note: text(),
 },
 (table) => [
 	index("menu_id").on(table.menuId),

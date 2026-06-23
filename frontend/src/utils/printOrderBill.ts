@@ -28,9 +28,10 @@ export const printOrderBill = (session: SessionItem, menu: MenuItem[]) => {
         qty: item.qty,
         price: menuItem.price,
         total: lineTotal,
+        note: item.note ?? "",
       };
     })
-    .filter(Boolean) as Array<{ name: string; qty: number; price: number; total: number }>;
+    .filter(Boolean) as Array<{ name: string; qty: number; price: number; total: number; note: string }>;
 
   const total = rows.reduce((sum, row) => sum + row.total, 0);
   const printedAt = new Date().toLocaleString("en-US", {
@@ -106,6 +107,7 @@ export const printOrderBill = (session: SessionItem, menu: MenuItem[]) => {
                   <td>
                     <strong>${escapeHtml(row.name)}</strong>
                     <div class="muted">${escapeHtml(kip(row.price))}</div>
+                    ${row.note ? `<div class="muted">ໝາຍເຫດ: ${escapeHtml(row.note)}</div>` : ""}
                   </td>
                   <td class="num">${escapeHtml(row.qty)}</td>
                   <td class="num">${escapeHtml(kip(row.total))}</td>

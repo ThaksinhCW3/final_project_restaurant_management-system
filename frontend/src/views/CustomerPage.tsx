@@ -1,6 +1,6 @@
-import { ArrowLeft, Bell, Check, CreditCard, Home, Minus, Percent, Plus, Receipt, Search, ShoppingBag, UserCircle, Utensils } from "lucide-react";
+import { Bell, Check, CreditCard, Home, Minus, Percent, Plus, Receipt, Search, ShoppingBag, UserCircle, Utensils, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { kip } from "../config/constants";
+import { kip, parseCurrency } from "../config/constants";
 import type { MenuItem, MenuOptionGroup, MenuOptionValue, SessionItem } from "../types";
 import "./CustomerPage.css";
 
@@ -10,8 +10,8 @@ type CustomerPageProps = {
   session: SessionItem | null;
   menu: MenuItem[];
   categories: any[];
-  addItem: (sessionId: string, menuId: number, quantity?: number) => void | Promise<void>;
-  rmItem: (sessionId: string, menuId: number) => void | Promise<void>;
+  addItem: (sessionId: string, menuId: number, quantity?: number, note?: string) => void | Promise<void>;
+  rmItem: (sessionId: string, menuId: number, note?: string) => void | Promise<void>;
   requestPayment: (sessionId: string) => void | Promise<void>;
 };
 
@@ -28,6 +28,7 @@ type CustomerCartLine = {
   qty: number;
   unitPrice: number;
   options: CustomerCartOption[];
+  note?: string;
 };
 
 export default function CustomerPage({
@@ -45,8 +46,10 @@ export default function CustomerPage({
   const [category, setCategory] = useState("ທັງໝົດ");
   const [showNotice, setShowNotice] = useState(false);
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
+  const [editingCartLineKey, setEditingCartLineKey] = useState<string | null>(null);
   const [detailQty, setDetailQty] = useState(1);
   const [selectedOptions, setSelectedOptions] = useState<SelectedOptions>({});
+  const [detailNote, setDetailNote] = useState("");
   const [cartLines, setCartLines] = useState<CustomerCartLine[]>(() => {
     if (typeof window === "undefined") return [];
 
@@ -96,6 +99,13 @@ export default function CustomerPage({
     window.localStorage.setItem(`customer-cart-options:${billId}`, JSON.stringify(cartLines));
   }, [billId, cartLines]);
 
+  const sessionMissing = loaded && Boolean(billId) && !session;
+
+  useEffect(() => {
+    if (!sessionMissing || typeof window === "undefined") return;
+    window.localStorage.removeItem(`customer-cart-options:${billId}`);
+  }, [billId, sessionMissing]);
+
   const sessionCartRows = session?.items ?? [];
   const optionLineQtyByMenu = cartLines.reduce<Record<number, number>>((qtyByMenu, line) => {
     qtyByMenu[line.menuId] = (qtyByMenu[line.menuId] ?? 0) + line.qty;
@@ -109,11 +119,12 @@ export default function CustomerPage({
       if (!menuItem || remainingQty <= 0) return null;
 
       return {
-        key: `base-${item.id}`,
+        key: `base-${item.id}-${String(item.note ?? "").trim().toLowerCase() || "no-note"}`,
         menuId: item.id,
         qty: remainingQty,
         unitPrice: menuItem.price,
         options: [],
+        note: item.note ?? "",
       };
     })
     .filter(Boolean) as CustomerCartLine[];
@@ -126,28 +137,93 @@ export default function CustomerPage({
   const cartCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
   const total = cartItems.reduce((sum, item) => sum + item.unitPrice * item.qty, 0);
 
-  const openMenuDetail = (item: MenuItem) => {
+  if (sessionMissing) {
+    return (
+      <div className="customer-mobile-page">
+        <div className="customer-mobile-shell">
+          <header className="customer-mobile-top customer-mobile-top--ended">
+            <div className="customer-mobile-brand-row">
+              <div className="customer-mobile-logo">
+                <Utensils size={18} />
+                <span>ໂອເລຟູດ</span>
+              </div>
+              <div className="customer-mobile-branch">{billId}</div>
+            </div>
+          </header>
+
+          <main className="customer-session-ended">
+            <div className="customer-session-ended-card">
+              <div className="customer-session-ended-icon">
+                <Receipt size={28} />
+              </div>
+              <h1>Session not found</h1>
+              <p>Please scan QR to start ordering.</p>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  const optionKey = (group: MenuOptionGroup) => String(group.id ?? group.name);
+  const optionValueKey = (value: MenuOptionValue) => value.id ?? value.name;
+  const optionPriceDelta = (value: MenuOptionValue) => parseCurrency(value.priceDelta || 0);
+  const buildDefaultOptions = (item: MenuItem): SelectedOptions => {
     const nextOptions: SelectedOptions = {};
 
     (item.optionGroups ?? []).forEach((group) => {
-      if (group.selectionType === "single" && group.values?.[0]?.id != null) {
-        nextOptions[String(group.id ?? group.name)] = [group.values[0].id];
+      if (group.selectionType === "single" && group.values?.[0]) {
+        nextOptions[optionKey(group)] = [optionValueKey(group.values[0])];
       }
     });
 
-    setSelectedOptions(nextOptions);
+    return nextOptions;
+  };
+
+  const openMenuDetail = (item: MenuItem) => {
+    setEditingCartLineKey(null);
+    setSelectedOptions(buildDefaultOptions(item));
+    setDetailNote("");
     setDetailQty(1);
     setSelectedMenu(item);
   };
 
-  const closeMenuDetail = () => {
-    setSelectedMenu(null);
-    setDetailQty(1);
-    setSelectedOptions({});
+  const openCartLineDetail = (line: CustomerCartLine & { menuItem?: MenuItem }) => {
+    if (!line.menuItem) return;
+
+    const nextOptions = buildDefaultOptions(line.menuItem);
+
+    (line.menuItem.optionGroups ?? []).forEach((group) => {
+      const values = (group.values ?? [])
+        .filter((value) =>
+          line.options.some((option) =>
+            option.groupName === group.name &&
+            option.valueName === value.name &&
+            option.priceDelta === optionPriceDelta(value),
+          ),
+        )
+        .map(optionValueKey);
+
+      if (values.length > 0) {
+        nextOptions[optionKey(group)] = values;
+      }
+    });
+
+    setEditingCartLineKey(line.key);
+    setSelectedOptions(nextOptions);
+    setDetailNote(line.note ?? "");
+    setDetailQty(line.qty);
+    setSelectedMenu(line.menuItem);
   };
 
-  const optionKey = (group: MenuOptionGroup) => String(group.id ?? group.name);
-  const optionValueKey = (value: MenuOptionValue) => value.id ?? value.name;
+  const closeMenuDetail = () => {
+    setSelectedMenu(null);
+    setEditingCartLineKey(null);
+    setDetailQty(1);
+    setSelectedOptions({});
+    setDetailNote("");
+  };
+
   const isOptionSelected = (group: MenuOptionGroup, value: MenuOptionValue) =>
     (selectedOptions[optionKey(group)] ?? []).includes(optionValueKey(value));
   const toggleOption = (group: MenuOptionGroup, value: MenuOptionValue) => {
@@ -177,7 +253,7 @@ export default function CustomerPage({
           .map((value) => ({
             groupName: group.name,
             valueName: value.name,
-            priceDelta: Number(value.priceDelta || 0),
+            priceDelta: optionPriceDelta(value),
           })),
       )
     : [];
@@ -194,31 +270,58 @@ export default function CustomerPage({
         .map((option) => `${option.groupName}:${option.valueName}:${option.priceDelta}`)
         .sort()
         .join("|");
-      const lineKey = `${selectedMenu.id}:${optionSignature || "base"}`;
+      const cleanNote = detailNote.trim();
+      const lineKey = `${selectedMenu.id}:${optionSignature || "base"}:${cleanNote.toLowerCase() || "no-note"}`;
+      const editingLine = editingCartLineKey
+        ? cartItems.find((line) => line.key === editingCartLineKey)
+        : null;
+      const nextLine: CustomerCartLine = {
+        key: lineKey,
+        menuId: selectedMenu.id,
+        qty: detailQty,
+        unitPrice: detailUnitPrice,
+        options: selectedOptionValues,
+        note: cleanNote,
+      };
 
       setCartLines((current) => {
+        if (editingCartLineKey) {
+          const withoutEditing = current.filter((line) => line.key !== editingCartLineKey);
+          const existing = withoutEditing.find((line) => line.key === lineKey);
+
+          if (existing) {
+            return withoutEditing.map((line) =>
+              line.key === lineKey
+                ? { ...line, qty: line.qty + detailQty, unitPrice: detailUnitPrice, options: selectedOptionValues, note: cleanNote }
+                : line,
+            );
+          }
+
+          return [...withoutEditing, nextLine];
+        }
+
         const existing = current.find((line) => line.key === lineKey);
 
         if (existing) {
           return current.map((line) =>
             line.key === lineKey
-              ? { ...line, qty: line.qty + detailQty, unitPrice: detailUnitPrice, options: selectedOptionValues }
+              ? { ...line, qty: line.qty + detailQty, unitPrice: detailUnitPrice, options: selectedOptionValues, note: cleanNote }
               : line,
           );
         }
 
-        return [
-          ...current,
-          {
-            key: lineKey,
-            menuId: selectedMenu.id,
-            qty: detailQty,
-            unitPrice: detailUnitPrice,
-            options: selectedOptionValues,
-          },
-        ];
+        return [...current, nextLine];
       });
-      void addItem(session.id, selectedMenu.id, detailQty);
+
+      const quantityDelta = editingLine ? detailQty - editingLine.qty : detailQty;
+      if (quantityDelta > 0) {
+        void addItem(session.id, selectedMenu.id, quantityDelta, cleanNote);
+      } else if (quantityDelta < 0) {
+        Array.from({ length: Math.abs(quantityDelta) }).forEach(() => {
+          void rmItem(session.id, selectedMenu.id, editingLine?.note ?? cleanNote);
+        });
+      }
+
       closeMenuDetail();
       setTab("cart");
     }
@@ -231,7 +334,7 @@ export default function CustomerPage({
         ? current
         : current.map((item) => item.key === line.key ? { ...item, qty: item.qty + 1 } : item),
     );
-    void addItem(session.id, line.menuId);
+    void addItem(session.id, line.menuId, 1, line.note ?? "");
   };
 
   const decreaseCartLine = (line: CustomerCartLine) => {
@@ -243,109 +346,17 @@ export default function CustomerPage({
             .map((item) => item.key === line.key ? { ...item, qty: item.qty - 1 } : item)
             .filter((item) => item.qty > 0),
     );
-    void rmItem(session.id, line.menuId);
+          void rmItem(session.id, line.menuId, line.note ?? "");
   };
 
   const renderMenuImage = (item?: MenuItem) => (
     item?.image ? <img src={item.image} alt={item.name} /> : <Utensils size={24} />
   );
 
-  if (selectedMenu) {
-    return (
-      <div className="customer-mobile-page">
-        <div className="customer-mobile-shell customer-mobile-shell--detail">
-          <main className="customer-detail">
-            <button
-              type="button"
-              className="customer-detail-back"
-              onClick={closeMenuDetail}
-              aria-label="ກັບໄປໜ້າເມນູ"
-            >
-              <ArrowLeft size={19} />
-            </button>
-
-            <div className="customer-detail-image">
-              {renderMenuImage(selectedMenu)}
-            </div>
-
-            <section className="customer-detail-body">
-              <div className="customer-detail-meta">
-                <span>{selectedMenu.cat}</span>
-                <strong>{kip(selectedMenu.price)}</strong>
-              </div>
-              <h1>{selectedMenu.name}</h1>
-              <p>{selectedMenu.en || selectedMenu.cat}</p>
-
-              {(selectedMenu.optionGroups ?? []).length > 0 && (
-                <div className="customer-detail-options">
-                  {(selectedMenu.optionGroups ?? []).map((group) => (
-                    <div key={optionKey(group)} className="customer-detail-option-group">
-                      <div className="customer-detail-option-head">
-                        <span>{group.name}</span>
-                        <small>
-                          {group.selectionType === "multiple" ? "ເລືອກໄດ້ຫຼາຍ" : "ເລືອກໜຶ່ງຢ່າງ"}
-                          {group.required ? " · ຈໍາເປັນ" : ""}
-                        </small>
-                      </div>
-                      <div className="customer-detail-option-values">
-                        {(group.values ?? []).map((value) => {
-                          const selected = isOptionSelected(group, value);
-
-                          return (
-                            <button
-                              key={String(optionValueKey(value))}
-                              type="button"
-                              className={selected ? "is-selected" : ""}
-                              onClick={() => toggleOption(group, value)}
-                            >
-                              <span>{value.name}</span>
-                              <small>{Number(value.priceDelta || 0) > 0 ? `+ ${kip(Number(value.priceDelta))}` : "ຄ່າເລີ່ມຕົ້ນ"}</small>
-                              {selected && <Check size={14} />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="customer-detail-quantity">
-                <div>
-                  <span>ຈໍານວນ</span>
-                  <strong>{detailQty}</strong>
-                </div>
-                <div className="customer-detail-stepper">
-                  <button type="button" onClick={() => setDetailQty((qty) => Math.max(1, qty - 1))}>
-                    <Minus size={15} />
-                  </button>
-                  <span>{detailQty}</span>
-                  <button type="button" onClick={() => setDetailQty((qty) => qty + 1)}>
-                    <Plus size={15} />
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            <div className="customer-detail-bar">
-              <div>
-                <span>ລວມ</span>
-                <strong>{kip(detailTotal)}</strong>
-              </div>
-              <button type="button" disabled={!canOrder} onClick={addSelectedMenu}>
-                ເພີ່ມໃສ່ກະຕ່າ
-              </button>
-            </div>
-          </main>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="customer-mobile-page">
       <div className="customer-mobile-shell">
-        <header className="customer-mobile-top">
+        <header className={tab === "cart" ? "customer-mobile-top customer-mobile-top--cart" : "customer-mobile-top"}>
           <div className="customer-mobile-brand-row">
             <div className="customer-mobile-logo">
               <Utensils size={20} />
@@ -358,7 +369,7 @@ export default function CustomerPage({
               onClick={() => setShowNotice((current) => !current)}
               aria-label="ແຈ້ງເຕືອນ"
             >
-              <Bell size={18} />
+              <Bell size={14} />
               {waitingPayment && <span />}
             </button>
           </div>
@@ -387,20 +398,24 @@ export default function CustomerPage({
             <div className="customer-mobile-message">ກໍາລັງໂຫຼດເມນູ...</div>
           ) : tab === "cart" ? (
             <section className="customer-mobile-cart">
-              <div className="customer-mobile-cart-head">
-                <div>
-                  <span>ກະຕ່າຂອງທ່ານ</span>
-                  <strong>{cartCount} ລາຍການ</strong>
-                </div>
-                <div>{kip(total)}</div>
-              </div>
-
               {cartItems.length === 0 ? (
                 <div className="customer-mobile-message">ຍັງບໍ່ມີລາຍການ.</div>
               ) : (
                 <div className="customer-mobile-cart-list">
                   {cartItems.map((item) => (
-                    <div key={item.key} className="customer-mobile-cart-row">
+                    <div
+                      key={item.key}
+                      className="customer-mobile-cart-row"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openCartLineDetail(item)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openCartLineDetail(item);
+                        }
+                      }}
+                    >
                       <div className="customer-mobile-cart-thumb">
                         {renderMenuImage(item.menuItem)}
                       </div>
@@ -416,14 +431,27 @@ export default function CustomerPage({
                             ))}
                           </div>
                         )}
+                        {item.note && <small className="customer-mobile-cart-note">ໝາຍເຫດ: {item.note}</small>}
                         <small>{kip(item.unitPrice)}</small>
                       </div>
                       <div className="customer-mobile-qty">
-                        <button disabled={!canOrder} onClick={() => decreaseCartLine(item)}>
+                        <button
+                          disabled={!canOrder}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            decreaseCartLine(item);
+                          }}
+                        >
                           <Minus size={13} />
                         </button>
                         <span>{item.qty}</span>
-                        <button disabled={!canOrder} onClick={() => increaseCartLine(item)}>
+                        <button
+                          disabled={!canOrder}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            increaseCartLine(item);
+                          }}
+                        >
                           <Plus size={13} />
                         </button>
                       </div>
@@ -431,6 +459,16 @@ export default function CustomerPage({
                   ))}
                 </div>
               )}
+
+              <div className="customer-mobile-cart-spacer" />
+
+              <div className="customer-mobile-cart-head">
+                <div>
+                  <span>ກະຕ່າຂອງທ່ານ</span>
+                  <strong>{cartCount} ລາຍການ</strong>
+                </div>
+                <div>{kip(total)}</div>
+              </div>
 
               {waitingPayment ? (
                 <div className="customer-mobile-waiting">ກໍາລັງລໍພະນັກງານຢືນຢັນ</div>
@@ -467,26 +505,27 @@ export default function CustomerPage({
             </section>
           ) : (
             <>
-              <section className="customer-mobile-promos">
-                {featuredItems.slice(0, 2).map((item, index) => (
-                  <button
-                    type="button"
-                    key={item.id}
-                    className={`customer-mobile-promo ${index === 1 ? "customer-mobile-promo--gold" : ""}`}
-                    onClick={() => openMenuDetail(item)}
-                  >
-                    <div>
-                      <strong>{item.name}</strong>
-                      <span>{item.cat} · {kip(item.price)}</span>
-                      <em>ສັ່ງຕອນນີ້</em>
-                    </div>
-                    <div className="customer-mobile-promo-image">{renderMenuImage(item)}</div>
-                  </button>
-                ))}
-              </section>
-
               {tab === "home" && (
                 <>
+                  <section className="customer-mobile-promos">
+                    <h2>ເມນູຂາຍດີທີ່ຢາກແນະນຳ</h2>
+                    {featuredItems.slice(0, 2).map((item, index) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        className={`customer-mobile-promo ${index === 1 ? "customer-mobile-promo--gold" : ""}`}
+                        onClick={() => openMenuDetail(item)}
+                      >
+                        <div>
+                          <strong>{item.name}</strong>
+                          <span>{item.cat} · {kip(item.price)}</span>
+                          <em>ສັ່ງຕອນນີ້</em>
+                        </div>
+                        <div className="customer-mobile-promo-image">{renderMenuImage(item)}</div>
+                      </button>
+                    ))}
+                  </section>
+
                   <section className="customer-mobile-section">
                     <div className="customer-mobile-section-head">
                       <h2>ໝວດໝູ່</h2>
@@ -511,7 +550,7 @@ export default function CustomerPage({
 
                   <section className="customer-mobile-section">
                     <div className="customer-mobile-section-head">
-                      <h2>ເມນູແນະນໍາ</h2>
+                      <h2>ລາຍການເມນູ</h2>
                     </div>
                     {featuredItems.length === 0 ? (
                       <div className="customer-mobile-message">
@@ -532,7 +571,9 @@ export default function CustomerPage({
                               <small>{item.cat}</small>
                               <span>{kip(item.price)}</span>
                             </div>
-                            <em>ເພີ່ມ</em>
+                            <em aria-label="ເພີ່ມເມນູ">
+                              <Plus size={14} />
+                            </em>
                           </button>
                         ))}
                       </div>
@@ -578,7 +619,9 @@ export default function CustomerPage({
                             <small>{item.cat}</small>
                             <span>{kip(item.price)}</span>
                           </div>
-                          <em>ເພີ່ມ</em>
+                          <em aria-label="ເພີ່ມເມນູ">
+                            <Plus size={14} />
+                          </em>
                         </button>
                       ))}
                     </div>
@@ -589,25 +632,129 @@ export default function CustomerPage({
           )}
         </main>
 
+        {selectedMenu && (
+          <div className="customer-detail-overlay" role="dialog" aria-modal="true" aria-label={selectedMenu.name}>
+            <button
+              type="button"
+              className="customer-detail-scrim"
+              onClick={closeMenuDetail}
+              aria-label="ປິດລາຍລະອຽດເມນູ"
+            />
+            <main className="customer-detail">
+              <button
+                type="button"
+                className="customer-detail-close"
+                onClick={closeMenuDetail}
+                aria-label="ປິດລາຍລະອຽດເມນູ"
+              >
+                <X size={22} />
+              </button>
+
+              <div className="customer-detail-image">
+                {renderMenuImage(selectedMenu)}
+              </div>
+
+              <section className="customer-detail-body">
+                <div className="customer-detail-meta">
+                  <span>{selectedMenu.cat}</span>
+                  <strong>{kip(selectedMenu.price)}</strong>
+                </div>
+                <h1>{selectedMenu.name}</h1>
+                {selectedMenu.en && selectedMenu.en !== selectedMenu.name && (
+                  <p>{selectedMenu.en}</p>
+                )}
+
+                {(selectedMenu.optionGroups ?? []).length > 0 && (
+                  <div className="customer-detail-options">
+                    {(selectedMenu.optionGroups ?? []).map((group) => (
+                      <div key={optionKey(group)} className="customer-detail-option-group">
+                        <div className="customer-detail-option-head">
+                          <span>{group.name}</span>
+                          <small>
+                            {group.selectionType === "multiple" ? "ເລືອກໄດ້ຫຼາຍ" : "ເລືອກໜຶ່ງຢ່າງ"}
+                            {group.required ? " · ຈໍາເປັນ" : ""}
+                          </small>
+                        </div>
+                        <div className="customer-detail-option-values">
+                          {(group.values ?? []).map((value) => {
+                            const selected = isOptionSelected(group, value);
+
+                            return (
+                              <button
+                                key={String(optionValueKey(value))}
+                                type="button"
+                                className={selected ? "is-selected" : ""}
+                                onClick={() => toggleOption(group, value)}
+                              >
+                                <span>{value.name}</span>
+                                {optionPriceDelta(value) > 0 && (
+                                  <small>+ {kip(optionPriceDelta(value))}</small>
+                                )}
+                                {selected && <Check size={14} />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <label className="customer-detail-note">
+                  <span>ໝາຍເຫດ</span>
+                  <textarea
+                    value={detailNote}
+                    onChange={(event) => setDetailNote(event.target.value)}
+                    placeholder="ຕົວຢ່າງ: ແພ້ຖົ່ວ, ບໍ່ໃສ່ຫອມ, ເຜັດນ້ອຍ"
+                    maxLength={255}
+                  />
+                </label>
+
+              </section>
+
+              <div className="customer-detail-bar">
+                <div className="customer-detail-stepper">
+                  <button type="button" onClick={() => setDetailQty((qty) => Math.max(1, qty - 1))}>
+                    <Minus size={18} />
+                  </button>
+                  <span>{detailQty}</span>
+                  <button type="button" onClick={() => setDetailQty((qty) => qty + 1)}>
+                    <Plus size={18} />
+                  </button>
+                </div>
+                <span className="customer-detail-bar-divider" />
+                <button type="button" className="customer-detail-add-cart" disabled={!canOrder} onClick={addSelectedMenu}>
+                  {editingCartLineKey ? "ອັບເດດກະຕ່າ" : "ເພີ່ມໃສ່ກະຕ່າ"} <span>|</span> {kip(detailTotal)}
+                </button>
+              </div>
+            </main>
+          </div>
+        )}
+
         <nav className="customer-mobile-nav">
           <button type="button" className={tab === "home" ? "is-active" : ""} onClick={() => setTab("home")}>
-            <Home size={19} />
+            <Home size={22} />
             <span>ຫຼັກ</span>
           </button>
           <button type="button" className={tab === "menu" ? "is-active" : ""} onClick={() => setTab("menu")}>
-            <Receipt size={19} />
+            <Receipt size={22} />
             <span>ເມນູ</span>
           </button>
-          <button type="button" className="customer-mobile-cart-action" onClick={() => setTab("cart")}>
+          <button type="button" className={tab === "cart" ? "customer-mobile-cart-action is-active" : "customer-mobile-cart-action"} onClick={() => setTab("cart")}>
             <ShoppingBag size={22} />
-            {cartCount > 0 && <em>{cartCount}</em>}
+            <span>ກະຕ່າ</span>
+            {cartCount > 0 && (
+              <em className="customer-mobile-cart-badge" aria-label={`${cartCount} ລາຍການໃນກະຕ່າ`}>
+                {cartCount > 99 ? "99+" : cartCount}
+              </em>
+            )}
           </button>
           <button type="button" className={tab === "offers" ? "is-active" : ""} onClick={() => setTab("offers")}>
-            <Percent size={19} />
+            <Percent size={22} />
             <span>ໂປຣໂມຊັນ</span>
           </button>
           <button type="button" className={tab === "profile" ? "is-active" : ""} onClick={() => setTab("profile")}>
-            <UserCircle size={19} />
+            <UserCircle size={22} />
             <span>ໂປຣໄຟລ໌</span>
           </button>
         </nav>

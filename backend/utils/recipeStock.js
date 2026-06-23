@@ -11,20 +11,24 @@ const formatQuantity = (value) => {
 };
 
 const normalizeItems = (items) => {
-    const byMenu = new Map();
+    const byLine = new Map();
 
     for (const item of items) {
         const menuId = Number(item.menu_id ?? item.menuId ?? item.id);
         const quantity = Number(item.quantity ?? item.qty);
+        const note = String(item.note ?? '').trim().slice(0, 255);
 
         if (!Number.isInteger(menuId) || !Number.isFinite(quantity) || quantity <= 0) {
             continue;
         }
 
-        byMenu.set(menuId, (byMenu.get(menuId) ?? 0) + quantity);
+        const lineKey = `${menuId}:${note}`;
+        const existing = byLine.get(lineKey) ?? { menuId, quantity: 0, note };
+        existing.quantity += quantity;
+        byLine.set(lineKey, existing);
     }
 
-    return Array.from(byMenu.entries()).map(([menuId, quantity]) => ({ menuId, quantity }));
+    return Array.from(byLine.values());
 };
 
 const getStockRequirements = (connection, items, options, callback) => {
@@ -34,16 +38,17 @@ const getStockRequirements = (connection, items, options, callback) => {
     }
 
     const normalizedItems = normalizeItems(items);
-    const menuIds = normalizedItems.map((item) => item.menuId);
+    const menuIds = [...new Set(normalizedItems.map((item) => item.menuId))];
 
     if (menuIds.length === 0) {
         callback(null, []);
         return;
     }
 
-    const itemQuantityByMenu = new Map(
-        normalizedItems.map((item) => [item.menuId, item.quantity]),
-    );
+    const itemQuantityByMenu = normalizedItems.reduce((quantities, item) => {
+        quantities.set(item.menuId, (quantities.get(item.menuId) ?? 0) + item.quantity);
+        return quantities;
+    }, new Map());
 
     const query = `
         SELECT

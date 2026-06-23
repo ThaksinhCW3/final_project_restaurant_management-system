@@ -171,7 +171,8 @@ const createTables = async (db) => {
       order_item_id INT AUTO_INCREMENT PRIMARY KEY,
       order_id INT NULL,
       menu_id INT NULL,
-      quantity INT NOT NULL DEFAULT 1
+      quantity INT NOT NULL DEFAULT 1,
+      note TEXT NULL
     )
   `);
 
@@ -249,6 +250,7 @@ const ensureColumn = async (db, table, column, definition) => {
 const updateExistingTables = async (db) => {
   await ensureColumn(db, "service_sessions", "note", "VARCHAR(255) NULL");
   await ensureColumn(db, "service_sessions", "table_id", "INT NULL");
+  await ensureColumn(db, "order_items", "note", "TEXT NULL");
   await ensureColumn(db, "imports", "received_by", "INT NULL");
   await ensureColumn(db, "supply_order_details", "received_quantity", "DECIMAL(10,2) NULL");
   await ensureColumn(db, "supply_order_details", "actual_unit_price", "DECIMAL(10,2) NULL");

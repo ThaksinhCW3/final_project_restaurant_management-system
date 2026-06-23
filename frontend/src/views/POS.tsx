@@ -1,6 +1,6 @@
 // src/views/POS.tsx
 import { useState, type FormEvent } from "react";
-import { CreditCard, ExternalLink, Minus, Plus, Printer, QrCode, Trash2, X } from "lucide-react";
+import { Check, CreditCard, ExternalLink, Minus, Plus, Printer, QrCode, Trash2, X } from "lucide-react";
 import { BILL_URL, C, kip } from "../config/constants";
 import type { MenuItem, SessionItem, TableItem } from "../types";
 import { printOrderBill } from "../utils/printOrderBill";
@@ -24,8 +24,8 @@ interface POSProps {
   createTable: (data: { tableNumber: string; seats: string; zone?: string }) => Promise<void>;
   deleteTable: (id: number) => void | Promise<void>;
   showQr: (session: SessionItem) => void;
-  addItem: (sessionId: string, menuId: number) => void | Promise<void>;
-  rmItem: (sessionId: string, menuId: number) => void | Promise<void>;
+  addItem: (sessionId: string, menuId: number, quantity?: number, note?: string) => void | Promise<void>;
+  rmItem: (sessionId: string, menuId: number, note?: string) => void | Promise<void>;
   requestPayment: (sessionId: string) => void | Promise<void>;
   confirmPayment: (sessionId: string) => void | Promise<void>;
   cancelSession: (sessionId: string) => void;
@@ -55,17 +55,57 @@ export default function POS({
   const [showTableForm, setShowTableForm] = useState(false);
   const [savingTable, setSavingTable] = useState(false);
   const [billPanelOpen, setBillPanelOpen] = useState(true);
+  const [tableFilter, setTableFilter] = useState<"all" | "occupied" | "active" | "payment" | "free">("all");
   const selectedSession = selectedSessionId ? sessions.find(session => session.id === selectedSessionId) : null;
-  const pendingPayments = sessions.filter(session => session.status === "pending_payment").length;
   const tableSessionId = (table: TableItem): string | null =>
     table.sessionId ? `B${String(table.sessionId).padStart(3, "0")}` : null;
   const tableSession = (table: TableItem): SessionItem | null => {
     const id = tableSessionId(table);
     return id ? sessions.find(session => session.id === id) ?? null : null;
   };
+  const tableStats = tables.reduce(
+    (stats, table) => {
+      const session = tableSession(table);
+      const occupied = table.status === "occupied" || Boolean(session);
+      stats.all += 1;
+      if (occupied) stats.occupied += 1;
+      if (session?.status === "active") stats.active += 1;
+      if (session?.status === "pending_payment") stats.payment += 1;
+      if (!occupied) stats.free += 1;
+      return stats;
+    },
+    { all: 0, occupied: 0, active: 0, payment: 0, free: 0 },
+  );
+  const filteredTables = tables.filter((table) => {
+    const session = tableSession(table);
+    const occupied = table.status === "occupied" || Boolean(session);
+
+    if (tableFilter === "occupied") return occupied;
+    if (tableFilter === "payment") return session?.status === "pending_payment";
+    if (tableFilter === "free") return !occupied;
+    return true;
+  });
+  const tableFilterItems: Array<{
+    id: typeof tableFilter;
+    label: string;
+    count: number;
+    tone?: "green" | "red";
+  }> = [
+    { id: "all", label: "ທັງໝົດ", count: tableStats.all, tone: "green" },
+    { id: "occupied", label: "ບໍ່ຫວ່າງ", count: tableStats.occupied, tone: "red" },
+    { id: "payment", label: "ລໍຊໍາລະ", count: tableStats.payment, tone: "red" },
+    { id: "free", label: "ວ່າງ", count: tableStats.free, tone: "green" },
+  ];
   const openCustomerView = (sessionId: string) => {
     window.open(BILL_URL(sessionId), "_blank", "noopener,noreferrer");
   };
+  const renderMenuThumb = (item: MenuItem) => (
+    item.image ? (
+      <img src={item.image} alt={item.name} />
+    ) : (
+      <span>{item.emoji || "ມ"}</span>
+    )
+  );
   const submitTable = async (event: FormEvent) => {
     event.preventDefault();
     if (savingTable) return;
@@ -85,11 +125,21 @@ export default function POS({
     <div className={`pos-shell ${billPanelOpen ? "pos-shell--panel-open" : "pos-shell--panel-closed"}`}>
       <div className="pos-main">
         <div className="pos-toolbar">
-          <span style={{ fontSize: 13, color: C.textMid }}>
-            <span style={{ color: C.text, fontWeight: 600 }}>{tables.length}</span> ໂຕະ ·{" "}
-            <span style={{ color: C.text, fontWeight: 600 }}>{sessions.length}</span> ບິນ QR ທີ່ເປີດ ·{" "}
-            <span style={{ color: C.gold, fontWeight: 600 }}>{pendingPayments}</span> ລໍຖ້າຊໍາລະ
-          </span>
+          <div className="pos-table-filters">
+            {tableFilterItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`pos-filter-pill ${tableFilter === item.id ? "is-active" : ""} ${item.tone === "red" ? "is-red" : "is-green"}`}
+                onClick={() => setTableFilter(item.id)}
+              >
+                {tableFilter === item.id && <Check size={14} />}
+                {tableFilter !== item.id && <span className="pos-filter-dot" />}
+                <span>{item.label}</span>
+                <em>{item.count}</em>
+              </button>
+            ))}
+          </div>
           <div className="pos-toolbar-spacer" />
           <button
             onClick={() => setBillPanelOpen((open) => !open)}
@@ -162,8 +212,8 @@ export default function POS({
           </form>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 12 }}>
-          {tables.map((table) => {
+        <div className="pos-table-grid">
+          {filteredTables.map((table) => {
             const session = tableSession(table);
             const total = session ? sessionTotal(session, menu) : 0;
             const isSel = Boolean(session && selectedSessionId === session.id);
@@ -172,6 +222,7 @@ export default function POS({
             return (
               <div
                 key={table.id}
+                className={`pos-table-card ${isSel ? "is-selected" : ""} ${occupied ? "is-occupied" : "is-free"} ${waitingPayment ? "is-payment" : ""}`}
                 onClick={() => {
                   if (!session) return;
                   if (isSel) {
@@ -181,18 +232,7 @@ export default function POS({
                     setBillPanelOpen(true);
                   }
                 }}
-                style={{
-                  background: isSel ? "rgba(211,47,47,0.10)" : C.card,
-                  border: `2px solid ${isSel ? C.gold : waitingPayment ? "rgba(208,64,48,0.33)" : occupied ? C.borderMid : C.border}`,
-                  borderRadius: 15,
-                  padding: "16px 15px",
-                  cursor: session ? "pointer" : "default",
-                  transition: "all 0.18s",
-                  position: "relative",
-                  opacity: occupied ? 1 : 0.78,
-                }}
               >
-                {waitingPayment && <div style={{ position: "absolute", top: 9, right: 9, width: 7, height: 7, borderRadius: "50%", background: C.red }} />}
                 {!occupied && (
                   <button
                     type="button"
@@ -207,24 +247,20 @@ export default function POS({
                     <Trash2 size={13} />
                   </button>
                 )}
-                <div style={{ fontSize: 21, fontWeight: 700, color: C.text, fontFamily: "var(--heading)" }}>{table.name}</div>
-                <div style={{ fontSize: 10, color: C.textDim, marginTop: 1 }}>{table.seats} ບ່ອນນັ່ງ</div>
-                <div style={{ marginTop: 11 }}>
-                  <div style={{ fontSize: 9, color: C.textDim, marginBottom: 2 }}>
-                    {session ? `ບິນ ${session.id} · ເປີດ ${session.createdAt}` : "ໂຕະວ່າງ"}
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, fontFamily: "var(--sans)" }}>{kip(total)}</div>
-                  <div style={{ fontSize: 9, color: waitingPayment ? C.gold : C.textDim, marginTop: 2 }}>
-                    {session ? `${session.items.length} ລາຍການ · ${waitingPayment ? "ລໍຖ້າຊໍາລະ" : "ເປີດຢູ່"}` : "ບໍ່ມີບິນທີ່ເປີດ"}
-                  </div>
+                <div className="pos-table-title">{table.name}</div>
+                <div className="pos-table-seats">{table.seats} ບ່ອນນັ່ງ</div>
+                <div className="pos-table-meta">
+                  <div>{session ? `ບິນ ${session.id} · ເປີດ ${session.createdAt}` : "ໂຕະວ່າງ"}</div>
+                  <strong>{kip(total)}</strong>
+                  <small>{session ? `${session.items.length} ລາຍການ · ${waitingPayment ? "ລໍຖ້າຊໍາລະ" : "ເປີດຢູ່"}` : "ບໍ່ມີບິນທີ່ເປີດ"}</small>
                 </div>
               </div>
             );
           })}
 
-          {tables.length === 0 && (
+          {filteredTables.length === 0 && (
             <div style={{ gridColumn: "1/-1", background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, padding: 22, color: C.textDim }}>
-              ຍັງບໍ່ມີໂຕະ. ເພີ່ມໂຕະທໍາອິດດ້ານເທິງ.
+              {tables.length === 0 ? "ຍັງບໍ່ມີໂຕະ. ເພີ່ມໂຕະທໍາອິດດ້ານເທິງ." : "ບໍ່ມີໂຕະໃນຕົວກອງນີ້."}
             </div>
           )}
         </div>
@@ -233,46 +269,47 @@ export default function POS({
       <div className={`pos-bill-panel ${billPanelOpen ? "pos-bill-panel--open" : "pos-bill-panel--closed"}`}>
         {selectedSession ? (
           <>
-            <div style={{ padding: "18px 18px 14px", borderBottom: `1px solid ${C.border}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+            <div className="pos-bill-head">
+              <div className="pos-bill-head-row">
                 <div>
-                  <div style={{ fontSize: 10, color: C.textDim, textTransform: "uppercase", letterSpacing: 1.2 }}>ບິນ QR</div>
-                  <div style={{ fontSize: 26, fontWeight: 700, color: C.text, fontFamily: "var(--heading)" }}>{selectedSession.id}</div>
-                  <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>{selectedSession.note || "ເຊດຊັນລູກຄ້າ"}</div>
+                  <div className="pos-bill-kicker">ບິນ QR</div>
+                  <div className="pos-bill-title">{selectedSession.id}</div>
+                  <div className="pos-bill-note">{selectedSession.note || "ເຊດຊັນລູກຄ້າ"}</div>
                 </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => showQr(selectedSession)} style={{ background: C.goldDim, border: `1px solid ${C.borderMid}`, color: C.gold, borderRadius: 8, cursor: "pointer", padding: "6px 9px", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}><QrCode size={13} /> QR</button>
-                  <button onClick={() => openCustomerView(selectedSession.id)} style={{ background: C.card, border: `1px solid ${C.border}`, color: C.textMid, borderRadius: 8, cursor: "pointer", padding: "6px 9px", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}><ExternalLink size={13} /> ເບິ່ງ</button>
-                  <button onClick={() => printOrderBill(selectedSession, menu)} style={{ background: C.card, border: `1px solid ${C.border}`, color: C.textMid, borderRadius: 8, cursor: "pointer", padding: "6px 9px", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}><Printer size={13} /> ພິມ</button>
-                  <button onClick={() => { setSelectedSessionId(null); setShowAddItems(false); setBillPanelOpen(false); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: C.textDim, padding: 4 }}><X size={16} /></button>
+                <div className="pos-bill-actions">
+                  <button className="is-primary" onClick={() => showQr(selectedSession)}><QrCode size={13} /> QR</button>
+                  <button onClick={() => openCustomerView(selectedSession.id)}><ExternalLink size={13} /> ເບິ່ງ</button>
+                  <button onClick={() => printOrderBill(selectedSession, menu)}><Printer size={13} /> ພິມ</button>
+                  <button className="is-close" onClick={() => { setSelectedSessionId(null); setShowAddItems(false); setBillPanelOpen(false); }}><X size={16} /></button>
                 </div>
               </div>
               {selectedSession.status === "pending_payment" && (
-                <div style={{ marginTop: 10, padding: "7px 10px", background: C.goldDim, border: `1px solid ${C.borderMid}`, borderRadius: 8, fontSize: 12, color: C.gold, textAlign: "center", fontWeight: 600 }}>
+                <div className="pos-bill-payment-note">
                   ກໍາລັງລໍພະນັກງານຢືນຢັນການຊໍາລະ
                 </div>
               )}
             </div>
 
-            <div style={{ flex: 1, overflow: "auto", padding: "10px 18px" }}>
-              {selectedSession.items.length === 0 && <div style={{ textAlign: "center", color: C.textDim, fontSize: 13, marginTop: 36 }}>ຍັງບໍ່ມີລາຍການ</div>}
+            <div className="pos-bill-items">
+              {selectedSession.items.length === 0 && <div className="pos-bill-empty">ຍັງບໍ່ມີລາຍການ</div>}
               {selectedSession.items.map(item => {
                 const menuItem = menu.find(entry => entry.id === item.id);
                 if (!menuItem) return null;
 
                 return (
-                  <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 0", borderBottom: `1px solid ${C.border}` }}>
-                    <span style={{ fontSize: 17 }}>{menuItem.emoji}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>{menuItem.name}</div>
-                      <div style={{ fontSize: 10, color: C.textDim }}>{kip(menuItem.price)}</div>
+                  <div key={`${item.id}-${item.note ?? ""}`} className="pos-bill-item">
+                    <div className="pos-bill-thumb">{renderMenuThumb(menuItem)}</div>
+                    <div className="pos-bill-item-info">
+                      <strong>{menuItem.name}</strong>
+                      <small>{menuItem.cat}</small>
+                      {item.note && <small className="pos-bill-item-note">ໝາຍເຫດ: {item.note}</small>}
+                      <span>{kip(menuItem.price * item.qty)}</span>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                      <button onClick={() => rmItem(selectedSession.id, item.id)} style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(208,64,48,0.12)", border: "1px solid rgba(208,64,48,0.28)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.red }}><Minus size={10} /></button>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: C.text, minWidth: 18, textAlign: "center" }}>{item.qty}</span>
-                      <button onClick={() => addItem(selectedSession.id, item.id)} style={{ width: 22, height: 22, borderRadius: "50%", background: C.goldDim, border: `1px solid ${C.borderMid}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.gold }}><Plus size={10} /></button>
+                    <div className="pos-bill-qty">
+                      <button onClick={() => rmItem(selectedSession.id, item.id, item.note ?? "")}><Minus size={13} /></button>
+                      <span>{item.qty}</span>
+                      <button onClick={() => addItem(selectedSession.id, item.id, 1, item.note ?? "")}><Plus size={13} /></button>
                     </div>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: C.text, width: 65, textAlign: "right", fontFamily: "var(--sans)" }}>{kip(menuItem.price * item.qty)}</span>
                   </div>
                 );
               })}
@@ -294,20 +331,20 @@ export default function POS({
               </div>
             )}
 
-            <div style={{ padding: "16px 18px", borderTop: `1px solid ${C.border}`, background: C.sidebar }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
-                <span style={{ fontSize: 14, color: C.textMid }}>ລວມ</span>
-                <span style={{ fontSize: 20, fontWeight: 700, color: C.gold, fontFamily: "var(--sans)" }}>{kip(sessionTotal(selectedSession, menu))}</span>
+            <div className="pos-bill-footer">
+              <div className="pos-bill-total">
+                <span>ລວມ</span>
+                <strong>{kip(sessionTotal(selectedSession, menu))}</strong>
               </div>
-              <div style={{ display: "flex", gap: 10, marginBottom: 9 }}>
-                <button onClick={() => setShowAddItems(!showAddItems)} style={{ flex: 1, padding: "10px", background: showAddItems ? C.card2 : "transparent", border: `1px solid ${C.borderMid}`, color: C.text, borderRadius: 10, cursor: "pointer" }}>{showAddItems ? "ປິດ" : "+ ເພີ່ມລາຍການ"}</button>
+              <div className="pos-bill-footer-actions">
+                <button className="pos-bill-add-more" onClick={() => setShowAddItems(!showAddItems)}>{showAddItems ? "ປິດ" : "+ ເພີ່ມລາຍການ"}</button>
                 {selectedSession.status === "active" ? (
-                  <button onClick={() => requestPayment(selectedSession.id)} style={{ flex: 1, padding: "10px", background: `linear-gradient(135deg,${C.gold},${C.amber})`, border: "none", color: "#fff", fontWeight: 700, borderRadius: 10, cursor: "pointer" }}><CreditCard size={14} /> ຊໍາລະ</button>
+                  <button className="pos-bill-pay" onClick={() => requestPayment(selectedSession.id)}><CreditCard size={14} /> ຊໍາລະ</button>
                 ) : (
-                  <button onClick={() => confirmPayment(selectedSession.id)} style={{ flex: 1, padding: "10px", background: `linear-gradient(135deg,${C.green},#3a7035)`, border: "none", color: "#fff", fontWeight: 700, borderRadius: 10, cursor: "pointer" }}>ຢືນຢັນ</button>
+                  <button className="pos-bill-pay is-confirm" onClick={() => confirmPayment(selectedSession.id)}>ຢືນຢັນ</button>
                 )}
               </div>
-              <button onClick={() => cancelSession(selectedSession.id)} style={{ width: "100%", padding: "9px", background: "rgba(208,64,48,0.08)", border: "1px solid rgba(208,64,48,0.3)", color: C.red, borderRadius: 10, cursor: "pointer" }}>ຍົກເລີກ / ປິດໂດຍບໍ່ຊໍາລະ</button>
+              <button className="pos-bill-cancel" onClick={() => cancelSession(selectedSession.id)}>ຍົກເລີກ / ປິດໂດຍບໍ່ຊໍາລະ</button>
             </div>
           </>
         ) : (

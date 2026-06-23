@@ -6,12 +6,9 @@ import {
   Users,
   Package,
   Utensils,
-  ChefHat,
-  Settings,
   LogOut,
   Search,
   Bell,
-  QrCode,
   CheckCircle,
   AlertTriangle,
 } from "lucide-react";
@@ -39,7 +36,6 @@ import {
 import Dashboard from "./views/Dashboard";
 import CustomerPage from "./views/CustomerPage";
 import {
-  BillingView,
   MenuView,
   ReportsView,
   SalesHistoryView,
@@ -64,6 +60,7 @@ import type { AppModalState } from "./types/app";
 import { apiClient } from "./api/client";
 import "./index.css";
 import "./App.css";
+import logoImage from "./assets/logo/olaylogo.jpg"
 
 type Toast = { id: number; msg: string; type: "success" | "error" | "info" };
 type AuthUser = {
@@ -444,17 +441,18 @@ export default function App() {
     await apiClient.sessions.replaceItems(sessionId, items);
   };
 
-  const addItem = async (sessionId: string, menuId: number, quantity = 1) => {
+  const addItem = async (sessionId: string, menuId: number, quantity = 1, note = "") => {
     const session = sessions.find((item) => item.id === sessionId);
     if (!session || session.status === "pending_payment") return;
 
     const safeQuantity = Math.max(1, Number(quantity) || 1);
-    const existing = session.items.find((item) => item.id === menuId);
+    const cleanNote = String(note ?? "").trim();
+    const existing = session.items.find((item) => item.id === menuId && String(item.note ?? "").trim() === cleanNote);
     const items = existing
       ? session.items.map((item) =>
-          item.id === menuId ? { ...item, qty: item.qty + safeQuantity } : item,
+          item.id === menuId && String(item.note ?? "").trim() === cleanNote ? { ...item, qty: item.qty + safeQuantity, note: cleanNote } : item,
         )
-      : [...session.items, { id: menuId, qty: safeQuantity }];
+      : [...session.items, { id: menuId, qty: safeQuantity, note: cleanNote }];
 
     setSessions((prev) =>
       prev.map((item) => (item.id === sessionId ? { ...item, items } : item)),
@@ -474,19 +472,20 @@ export default function App() {
     }
   };
 
-  const rmItem = async (sessionId: string, menuId: number) => {
+  const rmItem = async (sessionId: string, menuId: number, note = "") => {
     const session = sessions.find((item) => item.id === sessionId);
     if (!session || session.status === "pending_payment") return;
 
-    const existing = session.items.find((item) => item.id === menuId);
+    const cleanNote = String(note ?? "").trim();
+    const existing = session.items.find((item) => item.id === menuId && String(item.note ?? "").trim() === cleanNote);
     if (!existing) return;
 
     const items =
       existing.qty > 1
         ? session.items.map((item) =>
-            item.id === menuId ? { ...item, qty: item.qty - 1 } : item,
+            item.id === menuId && String(item.note ?? "").trim() === cleanNote ? { ...item, qty: item.qty - 1, note: cleanNote } : item,
           )
-        : session.items.filter((item) => item.id !== menuId);
+        : session.items.filter((item) => !(item.id === menuId && String(item.note ?? "").trim() === cleanNote));
 
     setSessions((prev) =>
       prev.map((item) => (item.id === sessionId ? { ...item, items } : item)),
@@ -1516,9 +1515,9 @@ export default function App() {
     ...sessions.map((session) => ({
       id: `session-${session.id}`,
       title: session.id,
-      page: "ບິນ",
+      page: "ຂາຍ",
       detail: `${session.note || "ບິນ"} · ${session.status}`,
-      view: "billing",
+      view: "pos",
       terms: [session.id, session.note, session.status, session.payMethod, session.tableNumber],
     })),
     ...sales.map((sale) => ({
@@ -1572,7 +1571,7 @@ export default function App() {
         id: `pending-${session.id}`,
         title: "ລໍຖ້າຊໍາລະ",
         detail: `${session.id} · ${session.note || "ບິນລູກຄ້າ"}`,
-        view: "billing",
+        view: "pos",
       })),
     ...lowIngredientItems.map((ingredient) => ({
       id: `ingredient-${ingredient.id}`,
@@ -1604,7 +1603,6 @@ export default function App() {
     { id: "pos", icon: ShoppingCart, label: "ຂາຍ" },
     { id: "menu", icon: Utensils, label: "ເມນູ" },
     { id: "stock", icon: Package, label: "ຄັງ" },
-    { id: "billing", icon: QrCode, label: "ບິນ" },
     { id: "sales-history", icon: ShoppingCart, label: "ການຂາຍ" },
     { id: "reports", icon: BarChart2, label: "ລາຍງານ" },
     { id: "staff", icon: Users, label: "ພະນັກ" },
@@ -1615,7 +1613,6 @@ export default function App() {
     pos: "ຈັດການໂຕະ",
     menu: "ເມນູ",
     stock: "ຄັງ",
-    billing: "ບິນ",
     "sales-history": "ປະຫວັດການຂາຍ",
     reports: "ລາຍງານ",
     staff: "ພະນັກ",
@@ -1651,9 +1648,9 @@ export default function App() {
       <div className="login-page">
         <form className="login-panel" onSubmit={submitLogin}>
           <div className="login-logo">
-            <ChefHat size={24} color={C.gold} />
+            <img src={logoImage} alt="OlayFood"/>
           </div>
-          <div className="login-kicker">ໂອເລ້ເຂົ້າຊອຍ</div>
+          <div className="login-kicker">ໂອເລ້ເຂົ້າຊອຍຫຼວງພະບາງ</div>
           <div className="login-title">ເຂົ້າລະບົບພະນັກງານ</div>
           <label className="login-field">
             <span>ຊື່ຜູ້ໃຊ້</span>
@@ -1703,7 +1700,7 @@ export default function App() {
           }}
           aria-label="ສະແດງແຖບຂ້າງ"
         >
-          <ChefHat size={18} />
+          <img src={logoImage} alt="OlayFood" />
         </button>
       ) : (
         <div
@@ -1711,7 +1708,7 @@ export default function App() {
           style={{ width: sidebarWidth }}
         >
           <div className="app-logo">
-            <ChefHat size={20} color={C.gold} />
+            <img src={logoImage} alt="OlayFood" />
           </div>
           {navItems.map((n) => (
             <NavBtn
@@ -1732,16 +1729,21 @@ export default function App() {
             />
           ))}
           <div className="app-sidebar-spacer" />
-          <div className={`app-sync ${loaded ? "app-sync--saved" : "app-sync--loading"}`}>
-            {loaded ? "● ບັນທຶກແລ້ວ" : "● ..."}
-          </div>
-          <NavBtn
-            icon={Settings}
-            label="ຕັ້ງຄ່າ"
-            active={false}
-            expanded={sidebarWidth >= 112}
-            onClick={() => {}}
-          />
+          <button
+            type="button"
+            className="app-sidebar-user"
+            aria-label={currentUser.name}
+          >
+            <span className="app-sidebar-user-avatar">
+              {currentUser.name?.slice(0, 1).toUpperCase() || "U"}
+            </span>
+            {sidebarWidth >= 112 && (
+              <span className="app-sidebar-user-meta">
+                <strong>{currentUser.name}</strong>
+                <small>{roleLabel(currentUser.role)}</small>
+              </span>
+            )}
+          </button>
           <NavBtn icon={LogOut} label="ອອກ" active={false} expanded={sidebarWidth >= 112} onClick={logout} />
           <button
             type="button"
@@ -1869,13 +1871,6 @@ export default function App() {
                 </div>
               )}
             </div>
-            <div className="app-user">
-              <div className="app-user-name">{currentUser.name}</div>
-              <div className="app-user-role">{roleLabel(currentUser.role)}</div>
-            </div>
-            <div className="app-avatar">
-              {currentUser.name?.slice(0, 1).toUpperCase() || "U"}
-            </div>
           </div>
         </div>
 
@@ -1899,16 +1894,6 @@ export default function App() {
               showQr={showQr}
               addItem={addItem}
               rmItem={rmItem}
-              requestPayment={requestPayment}
-              confirmPayment={confirmPayment}
-              cancelSession={cancelSession}
-            />
-          )}
-          {view === "billing" && (
-            <BillingView
-              sessions={searchedSessions}
-              menu={menu}
-              setModal={setModal}
               requestPayment={requestPayment}
               confirmPayment={confirmPayment}
               cancelSession={cancelSession}

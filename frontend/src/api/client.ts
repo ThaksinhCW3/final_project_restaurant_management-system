@@ -45,6 +45,24 @@ type MenuRow = {
   option_groups?: MenuOptionGroup[];
 };
 
+type ApiMenuOptionValue = {
+  id?: number | string;
+  name?: string;
+  value?: string;
+  priceDelta?: number | string | null;
+  price_delta?: number | string | null;
+  price_delta_kip?: number | string | null;
+};
+
+type ApiMenuOptionGroup = {
+  id?: number | string;
+  name?: string;
+  selectionType?: "single" | "multiple" | string;
+  selection_type?: "single" | "multiple" | string;
+  required?: boolean | number | string | null;
+  values?: ApiMenuOptionValue[];
+};
+
 type CategoryRow = {
   categoryId?: number;
   category_id?: number;
@@ -189,6 +207,7 @@ type OrderItemRow = {
   menuName?: string;
   menu_name?: string;
   quantity: number;
+  note?: string | null;
 };
 
 type SaleRow = {
@@ -387,6 +406,8 @@ const splitName = (name: string): { firstName: string; lastName: string } => {
   };
 };
 
+const itemNoteKey = (note?: string | null): string => String(note ?? "").trim();
+
 const buildOrderItemMap = (orders: OrderRow[], items: OrderItemRow[]): Map<number, OrderItem[]> => {
   const byOrderId = new Map<number, OrderItem[]>();
 
@@ -394,12 +415,13 @@ const buildOrderItemMap = (orders: OrderRow[], items: OrderItemRow[]): Map<numbe
     const orderId = row.order_id ?? row.orderId ?? 0;
     const menuId = row.menu_id ?? row.menuId ?? 0;
     const list = byOrderId.get(orderId) ?? [];
-    const existing = list.find(item => item.id === menuId);
+    const note = itemNoteKey(row.note);
+    const existing = list.find(item => item.id === menuId && itemNoteKey(item.note) === note);
 
     if (existing) {
       existing.qty += row.quantity;
     } else {
-      list.push({ id: menuId, qty: row.quantity });
+      list.push({ id: menuId, qty: row.quantity, note });
     }
 
     byOrderId.set(orderId, list);
@@ -419,7 +441,7 @@ const buildOrderItemMap = (orders: OrderRow[], items: OrderItemRow[]): Map<numbe
     const current = bySessionId.get(sessionId) ?? [];
 
     for (const item of orderItems) {
-      const existing = current.find(entry => entry.id === item.id);
+      const existing = current.find(entry => entry.id === item.id && itemNoteKey(entry.note) === itemNoteKey(item.note));
       if (existing) {
         existing.qty += item.qty;
       } else {
@@ -433,6 +455,19 @@ const buildOrderItemMap = (orders: OrderRow[], items: OrderItemRow[]): Map<numbe
   return bySessionId;
 };
 
+const normalizeOptionGroups = (groups: ApiMenuOptionGroup[] | undefined): MenuOptionGroup[] =>
+  (groups ?? []).map((group) => ({
+    id: group.id,
+    name: group.name ?? "",
+    selectionType: group.selectionType === "multiple" || group.selection_type === "multiple" ? "multiple" : "single",
+    required: group.required === true || group.required === 1 || group.required === "1",
+    values: (group.values ?? []).map((value) => ({
+      id: value.id,
+      name: value.name ?? value.value ?? "",
+      priceDelta: toNumber(value.priceDelta ?? value.price_delta ?? value.price_delta_kip, 0),
+    })),
+  }));
+
 const normalizeMenu = (row: MenuRow): MenuItem => ({
   id: row.menuId ?? row.menu_id ?? 0,
   name: row.menuName ?? row.menu_name ?? "",
@@ -444,7 +479,7 @@ const normalizeMenu = (row: MenuRow): MenuItem => ({
   emoji: row.menuImage ? "🖼️" : "🍜",
   categoryId: row.categoryId ?? row.category_id ?? null,
   image: row.menuImage ?? row.menu_image ?? null,
-  optionGroups: row.optionGroups ?? row.option_groups ?? [],
+  optionGroups: normalizeOptionGroups(row.optionGroups ?? row.option_groups),
 });
 
 const normalizeStaff = (row: StaffRow): StaffItem => ({
@@ -937,7 +972,7 @@ export const apiClient = {
       endedAt: data.endedAt,
     })),
     replaceItems: (id: string | number, items: OrderItem[]) => API.put(`/service-sessions/${parseSessionId(id) ?? id}/items`, {
-      items: items.map(item => ({ menu_id: item.id, quantity: item.qty })),
+      items: items.map(item => ({ menu_id: item.id, quantity: item.qty, note: item.note ?? "" })),
     }),
     delete: (id: string | number) => API.delete(`/service-sessions/${parseSessionId(id) ?? id}`),
   },
