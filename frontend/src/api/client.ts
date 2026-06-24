@@ -631,6 +631,7 @@ const normalizeSale = (
     total: formatMoney(row.totalAmount ?? row.total_amount),
     time: formatTime(row.paidAt ?? row.paid_at),
     date: formatDate(row.paidAt ?? row.paid_at),
+    occurredAt: row.paidAt ?? row.paid_at,
     sessionId,
     orders,
   };

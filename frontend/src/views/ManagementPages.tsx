@@ -1,7 +1,7 @@
-import { Check, Download, ExternalLink, Plus, Pencil, Printer, Trash2, Truck, Image as ImageIcon } from "lucide-react";
+import { CalendarDays, Check, Download, ExternalLink, Plus, Pencil, Printer, RotateCcw, Trash2, Truck, Image as ImageIcon } from "lucide-react";
 import { useState } from "react";
 import type { CSSProperties, Dispatch, SetStateAction } from "react";
-import { Btn } from "../components/SharedUI";
+import { Btn, Modal } from "../components/SharedUI";
 import { BILL_URL, C, kip } from "../config/constants";
 import type { AppModalState } from "../types/app";
 import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, SupplierItem, SupplyOrderDetailItem, SupplyOrderItem } from "../types";
@@ -337,6 +337,7 @@ export function StockView({
   setModal: DispatchModal;
   deleteStock: (id: number, name: string) => void;
 }) {
+  const [showPendingImports, setShowPendingImports] = useState(false);
   const visibleStock = stock.filter((r) => stockFilter === "all" || r.cur <= r.min);
   const lowStockCount = stock.filter((r) => r.cur <= r.min).length;
   const firstStock = stock[0];
@@ -345,6 +346,7 @@ export function StockView({
   );
   const openReceiveOrder = (order: SupplyOrderItem) => {
     const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
+    setShowPendingImports(false);
     setModal({
       type: "stock-receive",
       title: `ກວດຮັບໃບສັ່ງ #${order.id}`,
@@ -399,9 +401,32 @@ export function StockView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
-        <div style={{ fontSize: 14, color: C.textMid }}>ຄັງສິນຄ້າ</div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 14, color: C.textMid }}>ຄັງສິນຄ້າ</div>
+          <button onClick={() => setStockFilter("all")} style={chipStyle(stockFilter === "all")}>
+            <span style={dotStyle(C.green)} />
+            <span>ທັງໝົດ</span>
+            <span style={countStyle(stockFilter === "all")}>{stock.length}</span>
+          </button>
+          <button onClick={() => setStockFilter("low")} style={chipStyle(stockFilter === "low")}>
+            <span style={dotStyle(C.red)} />
+            <span>ຕ່ຳ</span>
+            <span style={countStyle(stockFilter === "low")}>{lowStockCount}</span>
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginLeft: "auto" }}>
+          <Btn
+            variant="secondary"
+            disabled={pendingSupplyOrders.length === 0}
+            onClick={() => setShowPendingImports(true)}
+            style={pendingSupplyOrders.length === 0 ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
+          >
+            <Check size={14} /> ລໍຖ້າກວດຮັບ
+            <span style={{ minWidth: 22, height: 20, padding: "0 7px", borderRadius: 999, background: pendingSupplyOrders.length > 0 ? "rgba(208,64,48,0.12)" : C.card2, color: pendingSupplyOrders.length > 0 ? C.red : C.textDim, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800 }}>
+              {pendingSupplyOrders.length}
+            </span>
+          </Btn>
           <Btn
             variant="secondary"
             onClick={() =>
@@ -451,12 +476,9 @@ export function StockView({
           </Btn>
         </div>
       </div>
-      {pendingSupplyOrders.length > 0 && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflow: "hidden" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>ລາຍການລໍຖ້າກວດຮັບ</div>
-            <div style={{ color: C.red, fontSize: 12 }}>{pendingSupplyOrders.length} ໃບສັ່ງ</div>
-          </div>
+      {showPendingImports && (
+        <Modal title="ລາຍການລໍຖ້າກວດຮັບ" onClose={() => setShowPendingImports(false)} width={820}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {pendingSupplyOrders.map((order) => {
             const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
             return (
@@ -468,7 +490,8 @@ export function StockView({
                   gap: 12,
                   alignItems: "center",
                   padding: "14px 16px",
-                  borderTop: `1px solid ${C.border}`,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 12,
                   minWidth: 760,
                 }}
               >
@@ -484,21 +507,10 @@ export function StockView({
               </div>
             );
           })}
-        </div>
+          </div>
+        </Modal>
       )}
       <>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <button onClick={() => setStockFilter("all")} style={chipStyle(stockFilter === "all")}>
-              <span style={dotStyle(C.green)} />
-              <span>ທັງໝົດ</span>
-              <span style={countStyle(stockFilter === "all")}>{stock.length}</span>
-            </button>
-            <button onClick={() => setStockFilter("low")} style={chipStyle(stockFilter === "low")}>
-              <span style={dotStyle(C.red)} />
-              <span>ຕ່ຳ</span>
-              <span style={countStyle(stockFilter === "low")}>{lowStockCount}</span>
-            </button>
-        </div>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflowX: "auto", overflowY: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "64px 1fr 80px 70px 80px 120px 140px 1fr", padding: "14px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase", minWidth: 940 }}>
           <span>ຮູບ</span><span>ສິນຄ້າ</span><span>ຈຳນວນ</span><span>ຫົວໜ່ວຍ</span><span>ຕ່ຳສຸດ</span><span>ຕົ້ນທຶນ</span><span>ຜູ້ສະໜອງ</span><span>ການຈັດການ</span>
@@ -542,9 +554,6 @@ export function ReportsView({
   sessions,
   supplyOrders,
   supplyOrderDetails,
-  revenueTotal,
-  activeBillsCount,
-  pendingBillsCount,
 }: {
   sales: SaleItem[];
   menu: MenuItem[];
@@ -554,13 +563,46 @@ export function ReportsView({
   sessions: SessionItem[];
   supplyOrders: SupplyOrderItem[];
   supplyOrderDetails: SupplyOrderDetailItem[];
-  revenueTotal: number;
-  activeBillsCount: number;
-  pendingBillsCount: number;
 }) {
   const [selectedReport, setSelectedReport] = useState("sales");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const normalizeDateKey = (value: string | null | undefined) => {
+    if (!value) return "";
+    const parts = value.split(/[/-]/).map(Number);
+    if (/^\d{1,4}[/-]\d{1,2}(?:[/-]\d{1,4})?$/.test(value) && parts.length >= 2 && parts.every(Number.isFinite)) {
+      const year = parts.length === 3 && parts[0] > 31 ? parts[0] : new Date().getFullYear();
+      const month = parts.length === 3 && parts[0] > 31 ? parts[1] : parts[0];
+      const day = parts.length === 3 && parts[0] > 31 ? parts[2] : parts[1];
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 10);
+    }
+    return "";
+  };
+  const isWithinSelectedRange = (value: string | null | undefined) => {
+    const key = normalizeDateKey(value);
+    if (!key) return !startDate && !endDate;
+    if (startDate && key < startDate) return false;
+    if (endDate && key > endDate) return false;
+    return true;
+  };
+  const filteredSales = sales.filter((sale) => isWithinSelectedRange(sale.occurredAt ?? sale.date));
+  const filteredSupplyOrders = supplyOrders.filter((order) => isWithinSelectedRange(order.orderDate));
+  const resetDateRange = () => {
+    setStartDate("");
+    setEndDate("");
+  };
+  const rangeLabel =
+    startDate || endDate
+      ? `${startDate || "…"} - ${endDate || "…"}`
+      : "ທຸກຊ່ວງເວລາ";
   const soldMenuQty = new Map<number, number>();
-  sales.forEach((sale) => {
+  filteredSales.forEach((sale) => {
     (sale.orders ?? []).forEach((item) => {
       soldMenuQty.set(item.id, (soldMenuQty.get(item.id) ?? 0) + item.qty);
     });
@@ -573,7 +615,7 @@ export function ReportsView({
     recipeCostByMenu.set(recipe.menuId, (recipeCostByMenu.get(recipe.menuId) ?? 0) + cost);
   });
 
-  const saleRows = sales.map((sale) => ({
+  const saleRows = filteredSales.map((sale) => ({
     ບິນ: sale.table,
     ລາຍການ: sale.items,
     ລວມ: sale.total,
@@ -614,7 +656,7 @@ export function ReportsView({
     ສະຖານະ: ingredient.stockQuantity <= ingredient.minThreshold ? "ຕ່ຳ" : "ປົກກະຕິ",
   }));
 
-  const importHistoryRows = supplyOrders
+  const importHistoryRows = filteredSupplyOrders
     .filter((order) => order.status === "completed")
     .flatMap((order) => {
     const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
@@ -683,14 +725,6 @@ export function ReportsView({
   ];
   const activeReport = reportOptions.find((report) => report.id === selectedReport) ?? reportOptions[0];
 
-  const profitTotal = profitRows.reduce((sum, row) => sum + row["ກໍາໄລປະມານ"], 0);
-  const reportCards = [
-    { label: "ລາຍຮັບລວມ", value: kip(revenueTotal), extra: "ຈາກບິນຈິງ", color: C.gold },
-    { label: "ກໍາໄລປະມານ", value: kip(profitTotal), extra: "ຈາກສູດວັດຖຸດິບ", color: C.green },
-    { label: "ບິນ QR", value: `${activeBillsCount}`, extra: "ບິນ QR ທີ່ເປີດຢູ່", color: C.green },
-    { label: "ລໍຖ້າຊໍາລະ", value: `${pendingBillsCount}`, extra: "ລໍພະນັກງານຢືນຢັນ", color: C.blue },
-  ];
-
   const escapeCell = (value: unknown) =>
     String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -724,12 +758,8 @@ export function ReportsView({
           </style>
         </head>
         <body>
-          ${renderExportTable("ລາຍງານການຂາຍ", saleRows)}
-          ${renderExportTable("ເມນູຂາຍດີ", bestSellingRows)}
-          ${renderExportTable("ກໍາໄລ", profitRows)}
-          ${renderExportTable("ວັດຖຸດິບໃນຄັງ", ingredientRows)}
-          ${renderExportTable("ປະຫວັດການນໍາເຂົ້າ", importHistoryRows)}
-          ${renderExportTable("ກະພະນັກງານ", staffShiftRows)}
+          <p>${escapeCell(rangeLabel)}</p>
+          ${renderExportTable(activeReport.title, activeReport.rows)}
         </body>
       </html>
     `;
@@ -737,7 +767,8 @@ export function ReportsView({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `restaurant-report-${new Date().toISOString().slice(0, 10)}.xls`;
+    const safeRange = startDate || endDate ? `${startDate || "start"}_${endDate || "end"}` : "all";
+    link.download = `restaurant-${selectedReport}-${safeRange}.xls`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -793,9 +824,40 @@ export function ReportsView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-        <div style={{ color: C.textMid, fontSize: 14 }}>ລາຍງານ</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <div className="report-toolbar">
+        <div className="report-date-filter">
+          <label>
+            <span>ຈາກວັນທີ</span>
+            <input
+              type="date"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={(event) => {
+                setStartDate(event.target.value);
+              }}
+            />
+          </label>
+          <label>
+            <span>ຫາວັນທີ</span>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={(event) => {
+                setEndDate(event.target.value);
+              }}
+            />
+          </label>
+          <button type="button" onClick={resetDateRange} disabled={!startDate && !endDate}>
+            <RotateCcw size={14} />
+            ທັງໝົດ
+          </button>
+          <small className="report-range-label">
+            <CalendarDays size={13} />
+            {rangeLabel}
+          </small>
+        </div>
+        <div className="report-toolbar-actions">
           <select
             value={selectedReport}
             onChange={(e) => setSelectedReport(e.target.value)}
@@ -820,15 +882,6 @@ export function ReportsView({
           </select>
           <Btn onClick={exportSpreadsheet}><Download size={14} /> ສົ່ງອອກສະເປຣດຊີດ</Btn>
         </div>
-      </div>
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        {reportCards.map((item) => (
-          <div key={item.label} style={{ flex: 1, minWidth: 140, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
-            <div style={{ fontSize: 10, color: C.textMid, textTransform: "uppercase", letterSpacing: 1.4 }}>{item.label}</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: C.text, marginTop: 7 }}>{item.value}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 10, color: item.color }}>{item.extra}</div>
-          </div>
-        ))}
       </div>
       <ReportTable title={activeReport.title} rows={activeReport.rows} />
     </div>

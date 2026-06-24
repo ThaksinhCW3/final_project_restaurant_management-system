@@ -1,7 +1,7 @@
 import { Bell, Check, Home, Minus, Plus, Receipt, Search, ShoppingBag, Utensils, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { kip, parseCurrency } from "../config/constants";
-import type { MenuItem, MenuOptionGroup, MenuOptionValue, SessionItem } from "../types";
+import type { MenuItem, MenuOptionGroup, MenuOptionValue, SaleItem, SessionItem } from "../types";
 import olayLogo from "../assets/logo/olaylogo.png";
 import "./CustomerPage.css";
 
@@ -11,6 +11,7 @@ type CustomerPageProps = {
   session: SessionItem | null;
   menu: MenuItem[];
   categories: any[];
+  sales: SaleItem[];
   submitOrder: (sessionId: string, items: Array<{ id: number; qty: number; note?: string | null }>) => void | Promise<void>;
   requestPayment: (sessionId: string) => void | Promise<void>;
   confirmOrderReceived: (sessionId: string) => void | Promise<void>;
@@ -56,6 +57,7 @@ export default function CustomerPage({
   session,
   menu,
   categories,
+  sales,
   submitOrder,
   requestPayment,
   confirmOrderReceived,
@@ -117,6 +119,27 @@ export default function CustomerPage({
       );
     });
   const featuredItems = visibleMenu.slice(0, 4);
+  const soldQuantityByMenu = useMemo(() => {
+    const quantities = new Map<number, number>();
+    sales.forEach((sale) => {
+      (sale.orders ?? []).forEach((order) => {
+        quantities.set(order.id, (quantities.get(order.id) ?? 0) + order.qty);
+      });
+    });
+    return quantities;
+  }, [sales]);
+  const recommendedItems = useMemo(
+    () =>
+      [...availableMenu]
+        .sort((a, b) => {
+          const quantityDifference =
+            (soldQuantityByMenu.get(b.id) ?? b.sold ?? 0) -
+            (soldQuantityByMenu.get(a.id) ?? a.sold ?? 0);
+          return quantityDifference || a.name.localeCompare(b.name);
+        })
+        .slice(0, 2),
+    [availableMenu, soldQuantityByMenu],
+  );
   const popularItems = [...visibleMenu]
     .sort((a, b) => (b.sold ?? 0) - (a.sold ?? 0))
     .slice(0, 8);
@@ -619,7 +642,7 @@ export default function CustomerPage({
                 <>
                   <section className="customer-mobile-promos">
                     <h2>ເມນູຂາຍດີທີ່ຢາກແນະນຳ</h2>
-                    {featuredItems.slice(0, 2).map((item, index) => (
+                    {recommendedItems.map((item, index) => (
                       <button
                         type="button"
                         key={item.id}

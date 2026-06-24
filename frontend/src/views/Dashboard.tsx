@@ -1,68 +1,160 @@
-// src/views/Dashboard.tsx
-import { DollarSign, ShoppingCart, Coffee, Star, TrendingUp } from "lucide-react";
-import { C, kip, today, CHART_DATA, PIE_DATA } from "../config/constants";
+import { BanknoteArrowDown, BanknoteArrowUp, CircleDollarSign, ReceiptText } from "lucide-react";
+import { C, kip } from "../config/constants";
 import { StatCard } from "../components/SharedUI";
-import type { SaleItem, MenuItem, SessionItem } from "../types";
+import type { MenuItem, SaleItem, SessionItem, SupplyOrderItem } from "../types";
 
 interface DashboardProps {
   sales: SaleItem[];
   sessions: SessionItem[];
   menu: MenuItem[];
+  supplyOrders: SupplyOrderItem[];
 }
 
-export default function Dashboard({ sales, sessions, menu }: DashboardProps) {
-  const pendingPayments = sessions.filter(session => session.status === "pending_payment").length;
-  const revenueToday = sales.filter(s => s.date === today()).reduce((sum, sale) => sum + sale.total, 0);
-  const openMenus = menu.filter(item => item.ok).length;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const startOfDay = (value: Date) =>
+  new Date(value.getFullYear(), value.getMonth(), value.getDate());
+
+const parseSaleDate = (value: string) => {
+  const parts = String(value ?? "").split(/[/-]/).map(Number);
+  if (parts.length === 3) {
+    if (parts[0] > 31) return startOfDay(new Date(parts[0], parts[1] - 1, parts[2]));
+    return startOfDay(new Date(new Date().getFullYear(), parts[0] - 1, parts[1]));
+  }
+  if (parts.length === 2) {
+    return startOfDay(new Date(new Date().getFullYear(), parts[0] - 1, parts[1]));
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : startOfDay(parsed);
+};
+
+const dateKey = (value: Date) =>
+  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+
+export default function Dashboard({ sales, sessions, menu, supplyOrders }: DashboardProps) {
+  const totalIncome = sales.reduce((sum, sale) => sum + sale.total, 0);
+  const completedImports = supplyOrders.filter((order) => order.status === "completed");
+  const totalOutcome = completedImports.reduce((sum, order) => sum + order.totalAmount, 0);
+  const netBalance = totalIncome - totalOutcome;
+  const pendingPayments = sessions.filter((session) => session.status === "pending_payment").length;
+  const activeBills = sessions.filter((session) => session.status === "active").length;
+
+  const today = startOfDay(new Date());
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today.getTime() - (6 - index) * DAY_MS);
+    return {
+      date,
+      key: dateKey(date),
+      label: date.toLocaleDateString("lo-LA", { weekday: "short" }),
+      shortDate: date.toLocaleDateString("lo-LA", { day: "2-digit", month: "2-digit" }),
+      income: 0,
+      outcome: 0,
+    };
+  });
+  const dayByKey = new Map(days.map((day) => [day.key, day]));
+
+  sales.forEach((sale) => {
+    const parsed = parseSaleDate(sale.date);
+    if (!parsed) return;
+    const day = dayByKey.get(dateKey(parsed));
+    if (day) day.income += sale.total;
+  });
+  completedImports.forEach((order) => {
+    const parsed = new Date(order.orderDate);
+    if (Number.isNaN(parsed.getTime())) return;
+    const day = dayByKey.get(dateKey(startOfDay(parsed)));
+    if (day) day.outcome += order.totalAmount;
+  });
+
+  const sevenDayIncome = days.reduce((sum, day) => sum + day.income, 0);
+  const sevenDayOutcome = days.reduce((sum, day) => sum + day.outcome, 0);
+  const chartMaximum = Math.max(1, ...days.flatMap((day) => [day.income, day.outcome]));
+
+  const soldByMenu = new Map<number, number>();
+  sales.forEach((sale) => {
+    (sale.orders ?? []).forEach((order) => {
+      soldByMenu.set(order.id, (soldByMenu.get(order.id) ?? 0) + order.qty);
+    });
+  });
+  const popularMenus = menu
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      quantity: soldByMenu.get(item.id) ?? 0,
+      revenue: (soldByMenu.get(item.id) ?? 0) * item.price,
+    }))
+    .filter((item) => item.quantity > 0)
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 5);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <StatCard label="ລາຍຮັບມື້ນີ້" value={kip(revenueToday)} sub="ຈາກຍອດຂາຍຈິງ" color={C.gold} icon={DollarSign} />
-        <StatCard label="ຍອດຂາຍ" value={String(sales.length)} sub="ທຸລະກຳທັງໝົດ" color={C.green} icon={ShoppingCart} />
-        <StatCard label="ບິນ QR" value={String(sessions.length)} sub={`${pendingPayments} ລໍຖ້າຊໍາລະ`} color={C.blue} icon={Coffee} />
-        <StatCard label="ເມນູທັງໝົດ" value={String(menu.length)} sub={`${openMenus} ລາຍການ ເປີດ`} color={C.amber} icon={Star} />
+    <div className="dashboard-overview">
+      <div className="dashboard-stat-grid">
+        <StatCard label="ລາຍຮັບລວມ" value={kip(totalIncome)} sub="ຈາກບິນທີ່ຊຳລະແລ້ວ" color={C.gold} icon={BanknoteArrowUp} />
+        <StatCard label="ລາຍຈ່າຍນຳເຂົ້າ" value={kip(totalOutcome)} sub={`${completedImports.length} ໃບສັ່ງທີ່ຮັບແລ້ວ`} color={C.red} icon={BanknoteArrowDown} />
+        <StatCard label="ຍອດຄົງເຫຼືອ" value={kip(netBalance)} sub="ລາຍຮັບຫັກລາຍຈ່າຍນຳເຂົ້າ" color={netBalance >= 0 ? C.green : C.red} icon={CircleDollarSign} />
+        <StatCard label="ບິນ QR ທີ່ເປີດ" value={String(sessions.length)} sub={`${activeBills} ກຳລັງໃຊ້ · ${pendingPayments} ລໍຊຳລະ`} color={C.blue} icon={ReceiptText} />
       </div>
 
-      <div style={{ display: "flex", gap: 18 }}>
-        <div style={{ flex: 2, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 22 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+      <div className="dashboard-main-grid">
+        <section className="dashboard-panel dashboard-cashflow">
+          <div className="dashboard-panel-heading">
             <div>
-              <div style={{ fontSize: 11, color: C.textMid, marginBottom: 3 }}>ລາຍຮັບ 6 ວັນທີ່ຜ່ານມາ</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "var(--heading)" }}>{kip(revenueToday)}</div>
+              <span>ກະແສເງິນ 7 ວັນຫຼ້າສຸດ</span>
+              <strong>{kip(sevenDayIncome - sevenDayOutcome)}</strong>
+              <small>ລາຍຮັບ {kip(sevenDayIncome)} · ລາຍຈ່າຍ {kip(sevenDayOutcome)}</small>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(74,140,69,0.12)", border: "1px solid rgba(74,140,69,0.3)", borderRadius: 8, padding: "4px 10px" }}>
-              <TrendingUp size={12} color={C.green} /><span style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>+18%</span>
+            <div className="dashboard-chart-legend">
+              <span><i className="is-income" /> ລາຍຮັບ</span>
+              <span><i className="is-outcome" /> ລາຍຈ່າຍ</span>
             </div>
           </div>
-          <div style={{ display: "grid", gap: 12 }}>
-            {CHART_DATA.map(item => (
-              <div key={item.day} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 28, fontSize: 11, color: C.textMid }}>{item.day}</span>
-                <div style={{ flex: 1, height: 10, background: C.border, borderRadius: 999, overflow: "hidden" }}>
-                  <div style={{ width: `${Math.min(100, (item.amt / 900000) * 100)}%`, height: "100%", background: C.gold }} />
-                </div>
-                <span style={{ width: 80, fontSize: 11, color: C.textDim, textAlign: "right" }}>{kip(item.amt)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
 
-        <div style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 22 }}>
-          <div style={{ fontSize: 11, color: C.textMid, marginBottom: 2 }}>ສັດສ່ວນລາຍຮັບ</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 14, fontFamily: "var(--heading)" }}>ຕາມໝວດໝູ່</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {PIE_DATA.map(e => (
-              <div key={e.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: e.color }} />
-                  <span style={{ fontSize: 11, color: C.textMid }}>{e.name}</span>
+          <div className="dashboard-bar-chart">
+            {days.map((day) => (
+              <div className="dashboard-chart-day" key={day.key}>
+                <div className="dashboard-chart-values">
+                  <span>{day.income > 0 ? kip(day.income) : ""}</span>
+                  <span>{day.outcome > 0 ? kip(day.outcome) : ""}</span>
                 </div>
-                <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{e.value}%</span>
+                <div className="dashboard-chart-bars">
+                  <div className="dashboard-chart-track">
+                    <div className="dashboard-chart-bar is-income" style={{ height: `${Math.max(day.income > 0 ? 8 : 0, (day.income / chartMaximum) * 100)}%` }} />
+                  </div>
+                  <div className="dashboard-chart-track">
+                    <div className="dashboard-chart-bar is-outcome" style={{ height: `${Math.max(day.outcome > 0 ? 8 : 0, (day.outcome / chartMaximum) * 100)}%` }} />
+                  </div>
+                </div>
+                <strong>{day.label}</strong>
+                <small>{day.shortDate}</small>
               </div>
             ))}
           </div>
-        </div>
+        </section>
+
+        <section className="dashboard-panel dashboard-popular">
+          <div className="dashboard-panel-heading">
+            <div>
+              <span>ເມນູຂາຍດີ</span>
+              <strong>5 ອັນດັບທຳອິດ</strong>
+            </div>
+          </div>
+          <div className="dashboard-popular-list">
+            {popularMenus.map((item, index) => (
+              <div key={item.id} className="dashboard-popular-item">
+                <span>{index + 1}</span>
+                <div>
+                  <strong>{item.name}</strong>
+                  <small>{item.quantity} ລາຍການ</small>
+                </div>
+                <b>{kip(item.revenue)}</b>
+              </div>
+            ))}
+            {popularMenus.length === 0 && (
+              <div className="dashboard-empty">ຍັງບໍ່ມີຂໍ້ມູນການຂາຍ</div>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

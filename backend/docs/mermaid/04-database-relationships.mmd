@@ -1,0 +1,20 @@
+flowchart LR
+    Categories["categories"] --> Menus["menus"]
+    Menus --> Recipes["recipes"]
+    Ingredients["ingredients"] --> Recipes
+
+    Staff["staff"] --> Sessions["service_sessions"]
+    Tables["tables"] --> Sessions
+    Sessions --> Orders["orders"]
+    Orders --> OrderItems["order_items"]
+    Menus --> OrderItems
+    Sessions --> Sales["sales"]
+
+    Suppliers["suppliers"] --> SupplyOrders["supply_orders"]
+    Staff --> SupplyOrders
+    SupplyOrders --> SupplyDetails["supply_order_details"]
+    Ingredients --> SupplyDetails
+    SupplyOrders --> Imports["imports"]
+    Staff --> Imports
+    Imports --> ImportDetails["import_details"]
+    Ingredients --> ImportDetails

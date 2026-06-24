@@ -1,0 +1,24 @@
+flowchart TD
+    LowStock["Dashboard or stock view<br/>shows low inventory"]
+    Decide{"Replenishment method"}
+
+    LowStock --> Decide
+
+    Decide -- Supply order --> BuildList["Manager selects ingredients,<br/>suppliers, quantities, and prices"]
+    BuildList --> CreateOrders["POST /api/supplier-orders/list"]
+    CreateOrders --> Group["Group items by supplier"]
+    Group --> PendingOrders["Create pending supply orders<br/>and supply order details"]
+    PendingOrders --> Delivery["Supplier delivers ingredients"]
+    Delivery --> CheckDelivery["Logged-in staff checks actual<br/>quantities and unit prices"]
+    CheckDelivery --> Receive["POST /api/supplier-orders/:id/receive"]
+    Receive --> ReceiveTransaction["Start database transaction"]
+    ReceiveTransaction --> ImportRecord["Create import and import details"]
+    ImportRecord --> Increase["Increase ingredient stock<br/>and update actual cost"]
+    Increase --> CompleteOrder["Set supply order to completed"]
+    CompleteOrder --> Commit["Commit transaction"]
+    Commit --> Updated["Refresh stock and reports"]
+
+    Decide -- Direct receive --> Direct["POST /api/stock/:id/receive"]
+    Direct --> DirectRecords["Create completed supply order,<br/>import, and import detail"]
+    DirectRecords --> DirectIncrease["Increase ingredient stock"]
+    DirectIncrease --> Updated

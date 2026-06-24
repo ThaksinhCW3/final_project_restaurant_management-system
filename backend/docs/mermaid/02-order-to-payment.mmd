@@ -1,0 +1,60 @@
+flowchart TD
+    Start([Open application])
+    CustomerRoute{"Customer QR URL<br/>contains bill ID?"}
+
+    Start --> CustomerRoute
+
+    CustomerRoute -- No --> Login["Staff login<br/>POST /api/staffs/login"]
+    Login --> Credentials{"Credentials valid?"}
+    Credentials -- No --> LoginError["Show login error"]
+    LoginError --> Login
+    Credentials -- Yes --> Token["Return JWT and staff role"]
+    Token --> Role{"Staff role"}
+    Role -- Employee --> EmployeeViews["POS and menu views"]
+    Role -- Manager --> ManagerViews["Dashboard, POS, menu,<br/>stock, reports, and staff"]
+
+    EmployeeViews --> CreateSession
+    ManagerViews --> CreateSession
+    CreateSession["Create dine-in or takeaway session<br/>POST /api/service-sessions"]
+    CreateSession --> Active["Session status is Active"]
+    Active --> QR["Display QR bill URL"]
+
+    CustomerRoute -- Yes --> LoadCustomer["Load session, menus,<br/>categories, and current items"]
+    QR --> Scan["Customer scans QR"]
+    Scan --> LoadCustomer
+    LoadCustomer --> SessionFound{"Active session found?"}
+    SessionFound -- No --> Ended["Show session not found or ended"]
+    SessionFound -- Yes --> Browse["Browse menu and choose<br/>options, quantity, and notes"]
+    Browse --> Cart["Add items to cart"]
+    Cart --> Submit["Submit or update order<br/>PUT /api/service-sessions/:id/items"]
+
+    Submit --> RecipeCheck["Calculate ingredient requirements<br/>from menu recipes"]
+    RecipeCheck --> StockAvailable{"Enough stock available?"}
+    StockAvailable -- No --> Shortage["HTTP 409<br/>Show insufficient stock"]
+    Shortage --> Browse
+    StockAvailable -- Yes --> SaveOrder["Create or reuse order and<br/>replace order items"]
+    SaveOrder --> Pending["Order status is Pending"]
+    Pending --> Notify["POS receives new or updated order<br/>using browser event and polling"]
+
+    Notify --> Prepare["Kitchen or staff prepares order"]
+    Prepare --> Served["Mark order Served"]
+    Served --> MoreFood{"Customer orders more?"}
+    MoreFood -- Yes --> Browse
+    MoreFood -- No --> RequestPay["Request payment"]
+    RequestPay --> PendingPayment["Session status is PendingPayment"]
+    PendingPayment --> ConfirmPay["Staff confirms payment"]
+
+    ConfirmPay --> SaleTransaction["POST /api/sales<br/>Start database transaction"]
+    SaleTransaction --> ExistingSale{"Sale already exists?"}
+    ExistingSale -- Yes --> CompleteSession
+    ExistingSale -- No --> LockStock["Lock ingredient rows and<br/>recalculate recipe requirements"]
+    LockStock --> FinalStockCheck{"Enough stock available?"}
+    FinalStockCheck -- No --> PaymentError["Roll back transaction<br/>Show shortage error"]
+    PaymentError --> ConfirmPay
+    FinalStockCheck -- Yes --> Deduct["Deduct ingredient quantities"]
+    Deduct --> RecordSale["Insert sales record"]
+    RecordSale --> Commit["Commit transaction"]
+    Commit --> CompleteSession["Set session status to Completed<br/>and save end time"]
+    CompleteSession --> FreeTable["Table becomes available"]
+    FreeTable --> Refresh["Refresh stock, sessions,<br/>tables, dashboard, and reports"]
+    Refresh --> Finish([Order completed])

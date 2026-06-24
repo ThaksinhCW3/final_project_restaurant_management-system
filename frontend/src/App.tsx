@@ -1666,6 +1666,7 @@ export default function App() {
         total,
         time: now(),
         date: today(),
+        occurredAt: new Date().toISOString(),
         sessionId: sessionNumericId,
         orders: session.items.map((item) => ({ ...item })),
       };
@@ -1742,8 +1743,6 @@ export default function App() {
       },
     });
 
-  const revenueTotal = sales.reduce((sum, sale) => sum + sale.total, 0);
-  const activeBillsCount = sessions.length;
   const pendingBillsCount = sessions.filter(session => session.status === "pending_payment").length;
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const includesSearch = (...values: unknown[]) =>
@@ -1910,7 +1909,7 @@ export default function App() {
   );
 
   const navItems = [
-    { id: "dashboard", icon: LayoutDashboard, label: "ຫຼັກ" },
+    { id: "dashboard", icon: LayoutDashboard, label: "ໜ້າຫຼັກ" },
     { id: "pos", icon: ShoppingCart, label: "ຂາຍ" },
     { id: "menu", icon: Utensils, label: "ເມນູ" },
     { id: "stock", icon: Package, label: "ຄັງ" },
@@ -1920,7 +1919,7 @@ export default function App() {
   const visibleNavItems = navItems.filter((item) => canAccessView(item.id));
 
   const titles: Record<string, string> = {
-    dashboard: "ພາບລວມ",
+    dashboard: "ໜ້າຫຼັກ",
     pos: "ຈັດການໂຕະ",
     menu: "ເມນູ",
     stock: "ຄັງ",
@@ -1946,6 +1945,7 @@ export default function App() {
         session={customerSession ?? null}
         menu={menu}
         categories={categories}
+        sales={sales}
         submitOrder={submitCustomerOrder}
         requestPayment={requestPayment}
         confirmOrderReceived={setSessionOrderServed}
@@ -2186,7 +2186,12 @@ export default function App() {
 
         <div className={`app-content ${view === "pos" ? "app-content--pos" : ""}`}>
           {view === "dashboard" && (
-            <Dashboard sales={searchedSales} sessions={searchedSessions} menu={searchedMenu} />
+            <Dashboard
+              sales={searchedSales}
+              sessions={searchedSessions}
+              menu={searchedMenu}
+              supplyOrders={supplyOrders}
+            />
           )}
           {view === "pos" && (
             <POS
@@ -2245,9 +2250,6 @@ export default function App() {
               sessions={searchedSessions}
               supplyOrders={supplyOrders}
               supplyOrderDetails={supplyOrderDetails}
-              revenueTotal={revenueTotal}
-              activeBillsCount={activeBillsCount}
-              pendingBillsCount={pendingBillsCount}
             />
           )}
           {view === "staff" && (

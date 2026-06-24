@@ -123,6 +123,7 @@ export interface SaleItem {
   total: number;
   time: string;
   date: string;
+  occurredAt?: string | null;
   sessionId?: number | null;
   orders?: OrderItem[];
 }

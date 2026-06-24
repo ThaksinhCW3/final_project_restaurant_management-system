@@ -1,0 +1,19 @@
+flowchart LR
+    Customer["Customer<br/>QR menu"]
+    Employee["Employee<br/>POS and menu"]
+    Manager["Manager<br/>Dashboard, POS, menu,<br/>stock, reports, staff"]
+
+    Frontend["React and Vite frontend<br/>Port 5173"]
+    API["Express REST API<br/>Port 5000"]
+    Auth["JWT authentication<br/>bcrypt passwords"]
+    Database[("MySQL<br/>Port 3306")]
+    Admin["phpMyAdmin<br/>Port 8080"]
+
+    Customer --> Frontend
+    Employee --> Frontend
+    Manager --> Frontend
+
+    Frontend -->|"Axios requests to /api"| API
+    API --> Auth
+    API --> Database
+    Admin --> Database
