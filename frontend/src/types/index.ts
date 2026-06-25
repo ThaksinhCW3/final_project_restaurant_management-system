@@ -139,6 +139,9 @@ export interface SessionItem {
   note: string;
   status: "active" | "pending_payment";
   orderStatus: "pending" | "preparing" | "ready" | null;
+  orderId?: number | null;
+  cancellationStatus?: "none" | "pending" | "approved" | "rejected";
+  cancellationReason?: string | null;
   items: SessionOrder[];
   createdAt: string;
   payMethod: string;

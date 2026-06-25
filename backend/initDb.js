@@ -162,7 +162,12 @@ const createTables = async (db) => {
       session_id INT NULL,
       staff_id INT NULL,
       ordered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      status VARCHAR(30) DEFAULT 'Pending'
+      status VARCHAR(30) DEFAULT 'Pending',
+      cancellation_status VARCHAR(20) DEFAULT 'none',
+      cancellation_reason TEXT NULL,
+      cancellation_requested_at DATETIME NULL,
+      cancellation_decided_at DATETIME NULL,
+      cancellation_decided_by INT NULL
     )
   `);
 
@@ -250,6 +255,11 @@ const ensureColumn = async (db, table, column, definition) => {
 const updateExistingTables = async (db) => {
   await ensureColumn(db, "service_sessions", "note", "VARCHAR(255) NULL");
   await ensureColumn(db, "service_sessions", "table_id", "INT NULL");
+  await ensureColumn(db, "orders", "cancellation_status", "VARCHAR(20) DEFAULT 'none'");
+  await ensureColumn(db, "orders", "cancellation_reason", "TEXT NULL");
+  await ensureColumn(db, "orders", "cancellation_requested_at", "DATETIME NULL");
+  await ensureColumn(db, "orders", "cancellation_decided_at", "DATETIME NULL");
+  await ensureColumn(db, "orders", "cancellation_decided_by", "INT NULL");
   await ensureColumn(db, "order_items", "note", "TEXT NULL");
   await ensureColumn(db, "imports", "received_by", "INT NULL");
   await ensureColumn(db, "supply_order_details", "received_quantity", "DECIMAL(10,2) NULL");

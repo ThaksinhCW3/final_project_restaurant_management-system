@@ -14,7 +14,7 @@ type CustomerPageProps = {
   sales: SaleItem[];
   submitOrder: (sessionId: string, items: Array<{ id: number; qty: number; note?: string | null }>) => void | Promise<void>;
   requestPayment: (sessionId: string) => void | Promise<void>;
-  confirmOrderReceived: (sessionId: string) => void | Promise<void>;
+  requestCancellation: (sessionId: string, reason: string) => void | Promise<void>;
 };
 
 type Tab = "home" | "menu" | "cart" | "offers" | "profile";
@@ -60,7 +60,7 @@ export default function CustomerPage({
   sales,
   submitOrder,
   requestPayment,
-  confirmOrderReceived,
+  requestCancellation,
 }: CustomerPageProps) {
   const [tab, setTab] = useState<Tab>("home");
   const [search, setSearch] = useState("");
@@ -76,6 +76,10 @@ export default function CustomerPage({
   const [orderNoticeTitle, setOrderNoticeTitle] = useState("ຄົວໄດ້ຮັບອໍເດີແລ້ວ");
   const [orderNoticeDetail, setOrderNoticeDetail] = useState("ກຳລັງຈັດກຽມອາຫານໃຫ້ທ່ານ");
   const [cartDraftDirty, setCartDraftDirty] = useState(false);
+  const [addingMore, setAddingMore] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [submittingCancellation, setSubmittingCancellation] = useState(false);
   const [cartLines, setCartLines] = useState<CustomerCartLine[]>(() => {
     if (typeof window === "undefined") return [];
 
@@ -89,7 +93,24 @@ export default function CustomerPage({
   const waitingPayment = session?.status === "pending_payment";
   const orderSubmitted = Boolean(session?.orderStatus || waitingPayment);
   const orderReceived = session?.orderStatus === "ready" || waitingPayment;
-  const canOrder = Boolean(session && !waitingPayment && !orderReceived);
+  const cancellationPending = session?.cancellationStatus === "pending";
+  const canOrder = Boolean(
+    session &&
+    !waitingPayment &&
+    !orderReceived &&
+    !cancellationPending &&
+    (!orderSubmitted || addingMore),
+  );
+  const orderStatus =
+    cancellationPending
+      ? { label: "ລໍຖ້າພະນັກງານອະນຸມັດການຍົກເລີກ", tone: "waiting" }
+      : waitingPayment
+      ? { label: "ລໍຖ້າການຊຳລະ", tone: "waiting" }
+      : session?.orderStatus === "ready"
+        ? { label: "ໄດ້ຮັບແລ້ວ", tone: "ready" }
+        : session?.orderStatus
+          ? { label: "ກຳລັງກະກຽມອາຫານ", tone: "preparing" }
+          : null;
 
   const availableMenu = menu.filter((item) => item.ok !== false);
   const categoryNames = useMemo(
@@ -147,6 +168,15 @@ export default function CustomerPage({
     if (typeof window === "undefined") return;
     window.localStorage.setItem(`customer-cart-options:${billId}`, JSON.stringify(cartLines));
   }, [billId, cartLines]);
+
+  useEffect(() => {
+    if (session?.cancellationStatus !== "approved") return;
+    setCartLines([]);
+    setCartDraftDirty(false);
+    setAddingMore(false);
+    setShowCancelDialog(false);
+    setCancelReason("");
+  }, [session?.cancellationStatus]);
 
   const optionKey = (group: MenuOptionGroup) => String(group.id ?? group.name);
   const optionValueKey = (value: MenuOptionValue) => value.id ?? value.name;
@@ -405,32 +435,6 @@ export default function CustomerPage({
     }
   };
 
-  const increaseCartLine = (line: CustomerCartLine) => {
-    if (!session) return;
-    setCartLines((current) =>
-      line.key.startsWith("base-")
-        ? current
-        : (orderSubmitted && !cartDraftDirty ? sessionCartLines : current).map((item) => item.key === line.key ? { ...item, qty: item.qty + 1 } : item),
-    );
-    if (orderSubmitted) {
-      setCartDraftDirty(true);
-    }
-  };
-
-  const decreaseCartLine = (line: CustomerCartLine) => {
-    if (!session) return;
-    setCartLines((current) =>
-      line.key.startsWith("base-")
-        ? current
-        : (orderSubmitted && !cartDraftDirty ? sessionCartLines : current)
-            .map((item) => item.key === line.key ? { ...item, qty: item.qty - 1 } : item)
-            .filter((item) => item.qty > 0),
-    );
-    if (orderSubmitted) {
-      setCartDraftDirty(true);
-    }
-  };
-
   const submitCartOrder = async () => {
     if (!session || cartItems.length === 0 || submittingOrder) return;
 
@@ -446,6 +450,7 @@ export default function CustomerPage({
         })),
       );
       setCartDraftDirty(false);
+      setAddingMore(false);
       setOrderNoticeTitle(isUpdate ? "ອັບເດດອໍເດີແລ້ວ" : "ຄົວໄດ້ຮັບອໍເດີແລ້ວ");
       setOrderNoticeDetail(isUpdate ? "ຄົວໄດ້ຮັບລາຍການເພີ່ມແລ້ວ" : "ກຳລັງຈັດກຽມອາຫານໃຫ້ທ່ານ");
       setOrderNoticeOpen(true);
@@ -453,6 +458,35 @@ export default function CustomerPage({
     } finally {
       setSubmittingOrder(false);
     }
+  };
+
+  const clearDraftOrder = () => {
+    setCartLines([]);
+    setCartDraftDirty(false);
+    setAddingMore(false);
+    closeMenuDetail();
+    setTab("cart");
+  };
+
+  const submitCancellationRequest = async () => {
+    const reason = cancelReason.trim();
+    if (!session || !reason || submittingCancellation) return;
+
+    setSubmittingCancellation(true);
+    try {
+      await requestCancellation(session.id, reason);
+      setShowCancelDialog(false);
+      setCancelReason("");
+    } finally {
+      setSubmittingCancellation(false);
+    }
+  };
+
+  const openCancellationDialog = () => {
+    setCartLines(sessionCartLines);
+    setCartDraftDirty(false);
+    setAddingMore(false);
+    setShowCancelDialog(true);
   };
 
   const renderMenuImage = (item?: MenuItem) => (
@@ -504,18 +538,24 @@ export default function CustomerPage({
           ) : tab === "cart" ? (
             <section className="customer-mobile-cart">
               {cartItems.length === 0 ? (
-                <div className="customer-mobile-message">ຍັງບໍ່ມີລາຍການ.</div>
+                <div className="customer-mobile-message">
+                  {session?.cancellationStatus === "approved"
+                    ? "ພະນັກງານອະນຸມັດການຍົກເລີກແລ້ວ. ທ່ານສາມາດສັ່ງໃໝ່ໄດ້."
+                    : "ຍັງບໍ່ມີລາຍການ."}
+                </div>
               ) : (
                 <div className="customer-mobile-cart-list">
                   {cartItems.map((item) => (
                     <div
                       key={item.key}
-                      className="customer-mobile-cart-row"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openCartLineDetail(item)}
+                      className={`customer-mobile-cart-row ${orderSubmitted ? "is-locked" : ""}`}
+                      role={orderSubmitted ? undefined : "button"}
+                      tabIndex={orderSubmitted ? -1 : 0}
+                      onClick={() => {
+                        if (!orderSubmitted) openCartLineDetail(item);
+                      }}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
+                        if (!orderSubmitted && (event.key === "Enter" || event.key === " ")) {
                           event.preventDefault();
                           openCartLineDetail(item);
                         }
@@ -538,28 +578,13 @@ export default function CustomerPage({
                         )}
                         {item.note && <small className="customer-mobile-cart-note">ໝາຍເຫດ: {item.note}</small>}
                         <small>{kip(item.unitPrice)}</small>
+                        {orderStatus && orderSubmitted && !cartDraftDirty && (
+                          <span className={`customer-mobile-item-status is-${orderStatus.tone}`}>
+                            {orderStatus.label}
+                          </span>
+                        )}
                       </div>
-                      <div className="customer-mobile-qty">
-                        <button
-                          disabled={!canOrder}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            decreaseCartLine(item);
-                          }}
-                        >
-                          <Minus size={13} />
-                        </button>
-                        <span>{item.qty}</span>
-                        <button
-                          disabled={!canOrder}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            increaseCartLine(item);
-                          }}
-                        >
-                          <Plus size={13} />
-                        </button>
-                      </div>
+                      <div className="customer-mobile-qty">×{item.qty}</div>
                     </div>
                   ))}
                 </div>
@@ -581,41 +606,99 @@ export default function CustomerPage({
                 ) : !session ? (
                   <div className="customer-mobile-waiting">ສະແກນ QR ຂອງໂຕະເພື່ອເລີ່ມສັ່ງອາຫານ.</div>
                 ) : orderReceived ? (
-                  <button
-                    type="button"
-                    className="customer-mobile-pay"
-                    disabled={cartItems.length === 0 || submittingOrder}
-                    onClick={() => requestPayment(session.id)}
-                  >
-                    <Receipt size={18} />
-                    ຂໍຊໍາລະ
-                  </button>
+                  <div className="customer-submitted-order-controls">
+                    {session.cancellationStatus === "rejected" && (
+                      <div className="customer-cancellation-result is-rejected">
+                        ພະນັກງານບໍ່ອະນຸມັດການຍົກເລີກ. ອໍເດີຍັງດຳເນີນຕໍ່.
+                      </div>
+                    )}
+                    {cancellationPending ? (
+                      <div className="customer-order-status is-waiting">
+                        ລໍຖ້າພະນັກງານອະນຸມັດການຍົກເລີກ
+                      </div>
+                    ) : (
+                      <div className="customer-order-actions">
+                        <button
+                          type="button"
+                          className="customer-cancel-button"
+                          onClick={openCancellationDialog}
+                        >
+                          ຂໍຍົກເລີກ
+                        </button>
+                        <button
+                          type="button"
+                          disabled={cartItems.length === 0 || submittingOrder}
+                          onClick={() => requestPayment(session.id)}
+                        >
+                          <Receipt size={18} />
+                          ຂໍຊໍາລະ
+                        </button>
+                      </div>
+                    )}
+                  </div>
               ) : orderSubmitted ? (
-                <div className="customer-order-actions">
-                  <button type="button" onClick={() => {
-                    setCartLines(sessionCartLines);
-                    setCartDraftDirty(false);
-                    setTab("menu");
-                  }}>
-                    ສັ່ງເພີ່ມ
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => hasPendingOrderUpdate ? submitCartOrder() : confirmOrderReceived(session.id)}
-                  >
-                    {hasPendingOrderUpdate ? "ອັບເດດອໍເດີ" : "ໄດ້ຮັບແລ້ວ"}
-                  </button>
+                <div className="customer-submitted-order-controls">
+                  {session.cancellationStatus === "rejected" && (
+                    <div className="customer-cancellation-result is-rejected">
+                      ພະນັກງານບໍ່ອະນຸມັດການຍົກເລີກ. ອໍເດີຍັງດຳເນີນຕໍ່.
+                    </div>
+                  )}
+                  <div className="customer-order-actions">
+                    <button
+                      type="button"
+                      disabled={cancellationPending}
+                      onClick={() => {
+                        setCartLines(sessionCartLines);
+                        setCartDraftDirty(false);
+                        setAddingMore(true);
+                        setTab("menu");
+                      }}
+                    >
+                      ສັ່ງເພີ່ມ
+                    </button>
+                    {hasPendingOrderUpdate ? (
+                      <button
+                        type="button"
+                        disabled={cancellationPending}
+                        onClick={submitCartOrder}
+                      >
+                        ອັບເດດອໍເດີ
+                      </button>
+                    ) : (
+                      <div className={`customer-order-status is-${orderStatus?.tone ?? "preparing"}`}>
+                        {orderStatus?.label ?? "ກຳລັງກະກຽມອາຫານ"}
+                      </div>
+                    )}
+                  </div>
+                  {!cancellationPending && (
+                    <button
+                      type="button"
+                      className="customer-cancel-order"
+                      onClick={openCancellationDialog}
+                    >
+                      ຂໍຍົກເລີກອໍເດີ
+                    </button>
+                  )}
                 </div>
                 ) : (
-                  <button
-                    type="button"
-                    className="customer-mobile-pay"
-                    disabled={cartItems.length === 0 || submittingOrder}
-                    onClick={submitCartOrder}
-                  >
-                    <Receipt size={18} />
-                    ສັ່ງອາຫານ
-                  </button>
+                  <div className="customer-order-actions">
+                    <button
+                      type="button"
+                      className="customer-cancel-button"
+                      disabled={cartItems.length === 0}
+                      onClick={clearDraftOrder}
+                    >
+                      ຍົກເລີກອໍເດີ
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cartItems.length === 0 || submittingOrder}
+                      onClick={submitCartOrder}
+                    >
+                      <Receipt size={18} />
+                      ສັ່ງອາຫານ
+                    </button>
+                  </div>
                 )}
               </div>
             </section>
@@ -861,6 +944,51 @@ export default function CustomerPage({
                 </button>
               </div>
             </main>
+          </div>
+        )}
+
+        {showCancelDialog && session && (
+          <div className="customer-cancel-overlay" role="dialog" aria-modal="true" aria-label="ຂໍຍົກເລີກອໍເດີ">
+            <button
+              type="button"
+              className="customer-cancel-scrim"
+              onClick={() => setShowCancelDialog(false)}
+              aria-label="ປິດ"
+            />
+            <section className="customer-cancel-dialog">
+              <div className="customer-cancel-dialog-head">
+                <div>
+                  <span>{session.id}</span>
+                  <h2>ຂໍຍົກເລີກອໍເດີ</h2>
+                </div>
+                <button type="button" onClick={() => setShowCancelDialog(false)} aria-label="ປິດ">
+                  <X size={18} />
+                </button>
+              </div>
+              <label>
+                <span>ເຫດຜົນທີ່ຕ້ອງການຍົກເລີກ</span>
+                <textarea
+                  autoFocus
+                  value={cancelReason}
+                  onChange={(event) => setCancelReason(event.target.value)}
+                  placeholder="ກະລຸນາບອກເຫດຜົນໃຫ້ພະນັກງານ"
+                  maxLength={500}
+                />
+                <small>{cancelReason.length}/500</small>
+              </label>
+              <div className="customer-cancel-dialog-actions">
+                <button type="button" onClick={() => setShowCancelDialog(false)}>
+                  ກັບຄືນ
+                </button>
+                <button
+                  type="button"
+                  disabled={!cancelReason.trim() || submittingCancellation}
+                  onClick={submitCancellationRequest}
+                >
+                  {submittingCancellation ? "ກຳລັງສົ່ງ..." : "ສົ່ງຄຳຂໍ"}
+                </button>
+              </div>
+            </section>
           </div>
         )}
 

@@ -130,6 +130,11 @@ export const orders = mysqlTable("orders", {
 	staffId: int("staff_id").references(() => staff.staffId, { onDelete: "set null" } ),
 	orderedAt: datetime("ordered_at", { mode: 'string'}).default(sql`(CURRENT_TIMESTAMP)`),
 	status: mysqlEnum(['Pending','Preparing','Served']).default('Pending'),
+	cancellationStatus: varchar("cancellation_status", { length: 20 }).default('none'),
+	cancellationReason: text("cancellation_reason"),
+	cancellationRequestedAt: datetime("cancellation_requested_at", { mode: 'string'}),
+	cancellationDecidedAt: datetime("cancellation_decided_at", { mode: 'string'}),
+	cancellationDecidedBy: int("cancellation_decided_by"),
 },
 (table) => [
 	index("session_id").on(table.sessionId),

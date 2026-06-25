@@ -299,6 +299,32 @@ export default function App() {
     apiClient.auth.setToken(currentUser?.token ?? null);
   }, [currentUser?.token]);
 
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      (window.location.pathname !== "/customer" &&
+        !window.location.search.includes("bill="))
+    ) {
+      return;
+    }
+
+    let active = true;
+    const refreshCustomerSession = async () => {
+      try {
+        const nextSessions = await apiClient.sessions.getAll();
+        if (active) setSessions(nextSessions);
+      } catch (err) {
+        console.error("Failed to refresh customer order status", err);
+      }
+    };
+
+    const timer = window.setInterval(refreshCustomerSession, 3000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   // Data is now persisted via API - no need for localStorage
 
   const toast = (msg: string, type: Toast["type"] = "success") => {
@@ -1608,6 +1634,60 @@ export default function App() {
     }
   };
 
+  const requestOrderCancellation = async (id: string, reason: string) => {
+    const session = sessions.find((item) => item.id === id);
+    if (!session || !session.orderStatus) return;
+
+    try {
+      await apiClient.orders.requestCancellation(id, reason);
+      setSessions((current) =>
+        current.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                cancellationStatus: "pending",
+                cancellationReason: reason.trim(),
+              }
+            : item,
+        ),
+      );
+      toast(`ສົ່ງຄຳຂໍຍົກເລີກ ${id} ແລ້ວ`, "info");
+    } catch (err) {
+      console.error("Request order cancellation failed", err);
+      const apiError = getApiErrorInfo(err);
+      toast(apiError.message || "ສົ່ງຄຳຂໍຍົກເລີກບໍ່ສຳເລັດ", "error");
+      throw err;
+    }
+  };
+
+  const decideOrderCancellation = async (
+    id: string,
+    decision: "approved" | "rejected",
+  ) => {
+    const session = sessions.find((item) => item.id === id);
+    if (!session?.orderId) return;
+
+    try {
+      await apiClient.orders.decideCancellation(session.orderId, decision);
+      const [nextSessions, nextTables] = await Promise.all([
+        apiClient.sessions.getAll(),
+        apiClient.tables.getAll(),
+      ]);
+      setSessions(nextSessions);
+      setTables(nextTables);
+      toast(
+        decision === "approved"
+          ? `ອະນຸມັດຍົກເລີກ ${id} ແລ້ວ`
+          : `ບໍ່ອະນຸມັດຍົກເລີກ ${id}`,
+        decision === "approved" ? "success" : "info",
+      );
+    } catch (err) {
+      console.error("Decide order cancellation failed", err);
+      const apiError = getApiErrorInfo(err);
+      toast(apiError.message || "ຕອບຄຳຂໍຍົກເລີກບໍ່ສຳເລັດ", "error");
+    }
+  };
+
   const submitCustomerOrder = async (id: string, items: SessionItem["items"]) => {
     const session = sessions.find((x) => x.id === id);
     if (!session || session.status === "pending_payment") return;
@@ -1883,6 +1963,14 @@ export default function App() {
         detail: `${session.id} · ${session.note || "ບິນລູກຄ້າ"}`,
         view: "pos",
       })),
+    ...sessions
+      .filter((session) => session.cancellationStatus === "pending")
+      .map((session) => ({
+        id: `cancel-${session.id}`,
+        title: "ຄຳຂໍຍົກເລີກອໍເດີ",
+        detail: `${session.id} · ${session.cancellationReason || "ລູກຄ້າຂໍຍົກເລີກ"}`,
+        view: "pos",
+      })),
     ...lowIngredientItems.map((ingredient) => ({
       id: `ingredient-${ingredient.id}`,
       title: "ວັດຖຸດິບໃກ້ໝົດ",
@@ -1948,7 +2036,7 @@ export default function App() {
         sales={sales}
         submitOrder={submitCustomerOrder}
         requestPayment={requestPayment}
-        confirmOrderReceived={setSessionOrderServed}
+        requestCancellation={requestOrderCancellation}
       />
     );
   }
@@ -2212,6 +2300,7 @@ export default function App() {
               updateItem={updateItem}
               requestPayment={requestPayment}
               confirmOrderReceived={setSessionOrderServed}
+              decideOrderCancellation={decideOrderCancellation}
               confirmPayment={confirmPayment}
               cancelSession={cancelSession}
             />

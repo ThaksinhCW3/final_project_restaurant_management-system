@@ -57,6 +57,7 @@ interface POSProps {
   updateItem: (sessionId: string, menuId: number, previousNote: string, quantity: number, nextNote?: string) => void | Promise<void>;
   requestPayment: (sessionId: string) => void | Promise<void>;
   confirmOrderReceived: (sessionId: string) => void | Promise<void>;
+  decideOrderCancellation: (sessionId: string, decision: "approved" | "rejected") => void | Promise<void>;
   confirmPayment: (sessionId: string) => void | Promise<void>;
   cancelSession: (sessionId: string) => void;
 }
@@ -79,6 +80,7 @@ export default function POS({
   updateItem,
   requestPayment,
   confirmOrderReceived,
+  decideOrderCancellation,
   confirmPayment,
   cancelSession,
 }: POSProps) {
@@ -439,6 +441,30 @@ export default function POS({
                   ກໍາລັງລໍພະນັກງານຢືນຢັນການຊໍາລະ
                 </div>
               )}
+              {selectedSession.cancellationStatus === "pending" && (
+                <div className="pos-cancellation-request">
+                  <div>
+                    <strong>ລູກຄ້າຂໍຍົກເລີກອໍເດີ</strong>
+                    <span>{selectedSession.cancellationReason || "ບໍ່ລະບຸເຫດຜົນ"}</span>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      className="is-reject"
+                      onClick={() => decideOrderCancellation(selectedSession.id, "rejected")}
+                    >
+                      <X size={14} /> ບໍ່ອະນຸມັດ
+                    </button>
+                    <button
+                      type="button"
+                      className="is-approve"
+                      onClick={() => decideOrderCancellation(selectedSession.id, "approved")}
+                    >
+                      <Check size={14} /> ອະນຸມັດ
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="pos-bill-items">
@@ -452,6 +478,7 @@ export default function POS({
                     <button
                       type="button"
                       className="pos-bill-item-edit"
+                      disabled={selectedSession.cancellationStatus === "pending"}
                       onClick={() => openEditMenuDetail(menuItem, item)}
                     >
                       <div className="pos-bill-thumb">{renderMenuThumb(menuItem)}</div>
@@ -463,9 +490,19 @@ export default function POS({
                       </div>
                     </button>
                     <div className="pos-bill-qty">
-                      <button onClick={() => rmItem(selectedSession.id, item.id, item.note ?? "")}><Minus size={13} /></button>
+                      <button
+                        disabled={selectedSession.cancellationStatus === "pending"}
+                        onClick={() => rmItem(selectedSession.id, item.id, item.note ?? "")}
+                      >
+                        <Minus size={13} />
+                      </button>
                       <span>{item.qty}</span>
-                      <button onClick={() => addItem(selectedSession.id, item.id, 1, item.note ?? "")}><Plus size={13} /></button>
+                      <button
+                        disabled={selectedSession.cancellationStatus === "pending"}
+                        onClick={() => addItem(selectedSession.id, item.id, 1, item.note ?? "")}
+                      >
+                        <Plus size={13} />
+                      </button>
                     </div>
                   </div>
                 );
@@ -478,19 +515,32 @@ export default function POS({
                 <strong>{kip(sessionTotal(selectedSession, menu))}</strong>
               </div>
               <div className="pos-bill-footer-actions">
-                <button className="pos-bill-add-more" onClick={() => setShowAddItems(true)}>+ ເພີ່ມລາຍການ</button>
+                <button
+                  className="pos-bill-add-more"
+                  disabled={selectedSession.cancellationStatus === "pending"}
+                  onClick={() => setShowAddItems(true)}
+                >
+                  + ເພີ່ມລາຍການ
+                </button>
                 {selectedSession.status === "active" && selectedSession.orderStatus !== "ready" ? (
                   <button
                     className="pos-bill-pay is-confirm"
-                    disabled={!selectedSession.orderStatus || selectedSession.items.length === 0}
+                    disabled={
+                      !selectedSession.orderStatus ||
+                      selectedSession.items.length === 0 ||
+                      selectedSession.cancellationStatus === "pending"
+                    }
                     onClick={() => confirmOrderReceived(selectedSession.id)}
                   >
-                    <Check size={14} /> ຢືນຢັນອໍເດີ
+                    <Check size={14} /> ໄດ້ຮັບແລ້ວ
                   </button>
                 ) : selectedSession.status === "active" ? (
                   <button
                     className="pos-bill-pay"
-                    disabled={selectedSession.items.length === 0}
+                    disabled={
+                      selectedSession.items.length === 0 ||
+                      selectedSession.cancellationStatus === "pending"
+                    }
                     onClick={() => requestPayment(selectedSession.id)}
                   >
                     <CreditCard size={14} /> ຂໍຊໍາລະ

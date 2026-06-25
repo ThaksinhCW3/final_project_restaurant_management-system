@@ -195,6 +195,10 @@ type OrderRow = {
   status?: string;
   ordered_at?: string;
   orderedAt?: string;
+  cancellationStatus?: string | null;
+  cancellation_status?: string | null;
+  cancellationReason?: string | null;
+  cancellation_reason?: string | null;
 };
 
 type OrderItemRow = {
@@ -574,13 +578,37 @@ const toOrderStatus = (value: string | null | undefined): SessionItem["orderStat
   return null;
 };
 
-const buildOrderStatusMap = (orders: OrderRow[]): Map<number, SessionItem["orderStatus"]> => {
-  const bySessionId = new Map<number, SessionItem["orderStatus"]>();
+type SessionOrderState = {
+  orderId: number;
+  orderStatus: SessionItem["orderStatus"];
+  cancellationStatus: NonNullable<SessionItem["cancellationStatus"]>;
+  cancellationReason: string | null;
+};
+
+const toCancellationStatus = (
+  value: string | null | undefined,
+): NonNullable<SessionItem["cancellationStatus"]> =>
+  value === "pending" || value === "approved" || value === "rejected"
+    ? value
+    : "none";
+
+const buildOrderStateMap = (orders: OrderRow[]): Map<number, SessionOrderState> => {
+  const bySessionId = new Map<number, SessionOrderState>();
 
   for (const order of orders) {
     const sessionId = order.session_id ?? order.sessionId ?? null;
     if (!sessionId || bySessionId.has(sessionId)) continue;
-    bySessionId.set(sessionId, toOrderStatus(order.status));
+    const cancellationStatus = toCancellationStatus(
+      order.cancellationStatus ?? order.cancellation_status,
+    );
+    bySessionId.set(sessionId, {
+      orderId: order.orderId ?? order.order_id,
+      orderStatus:
+        cancellationStatus === "approved" ? null : toOrderStatus(order.status),
+      cancellationStatus,
+      cancellationReason:
+        order.cancellationReason ?? order.cancellation_reason ?? null,
+    });
   }
 
   return bySessionId;
@@ -589,7 +617,7 @@ const buildOrderStatusMap = (orders: OrderRow[]): Map<number, SessionItem["order
 const normalizeSession = (
   row: SessionRow,
   sessionItems: Map<number, OrderItem[]>,
-  orderStatuses: Map<number, SessionItem["orderStatus"]>,
+  orderStates: Map<number, SessionOrderState>,
 ): SessionItem => {
   const sessionId = row.sessionId ?? row.session_id;
   const label = sessionLabel(sessionId);
@@ -597,12 +625,16 @@ const normalizeSession = (
   const tableNumber = row.tableNumber ?? row.table_number;
   const sessionType = row.sessionType ?? row.session_type ?? "dine-in";
   const note = row.note || (tableNumber ? `Table ${tableNumber}` : sessionType);
+  const orderState = orderStates.get(sessionId);
 
   return {
     id: label,
     note,
     status: toSessionStatus(row.status),
-    orderStatus: orderStatuses.get(sessionId) ?? null,
+    orderStatus: orderState?.orderStatus ?? null,
+    orderId: orderState?.orderId ?? null,
+    cancellationStatus: orderState?.cancellationStatus ?? "none",
+    cancellationReason: orderState?.cancellationReason ?? null,
     items: itemCount,
     createdAt: formatTime(row.startedAt ?? row.started_at),
     payMethod: sessionType as string,
@@ -930,6 +962,12 @@ export const apiClient = {
     getAll: () => API.get("/orders").then(r => r.data),
     create: (data: any) => API.post("/orders", data),
     update: (id: number, data: any) => API.put(`/orders/${id}`, data),
+    requestCancellation: (sessionId: string | number, reason: string) =>
+      API.post(`/orders/session/${parseSessionId(sessionId) ?? sessionId}/cancellation-request`, {
+        reason,
+      }),
+    decideCancellation: (orderId: number, decision: "approved" | "rejected") =>
+      API.post(`/orders/${orderId}/cancellation-decision`, { decision }),
     delete: (id: number) => API.delete(`/orders/${id}`),
   },
 
@@ -942,11 +980,11 @@ export const apiClient = {
       ]);
 
       const sessionItems = buildOrderItemMap(ordersRes.data, orderItemsRes.data);
-      const orderStatuses = buildOrderStatusMap(ordersRes.data);
+      const orderStates = buildOrderStateMap(ordersRes.data);
 
       return sessionsRes.data
         .filter(row => row.status === "Active" || row.status === "PendingPayment" || row.status === null || row.status === undefined)
-        .map(row => normalizeSession(row, sessionItems, orderStatuses));
+        .map(row => normalizeSession(row, sessionItems, orderStates));
     },
     create: async (data: SessionCreateInput): Promise<SessionItem> => {
       const response = await API.post("/service-sessions", createSessionPayload(data));
@@ -957,6 +995,9 @@ export const apiClient = {
         note: data.note || (data.tableNumber ? `Table ${data.tableNumber}` : data.sessionType ?? "dine-in"),
         status: "active",
         orderStatus: null,
+        orderId: null,
+        cancellationStatus: "none",
+        cancellationReason: null,
         items: [],
         createdAt: now(),
         payMethod: data.sessionType ?? "dine-in",

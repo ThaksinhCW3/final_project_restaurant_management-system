@@ -214,32 +214,49 @@ module.exports = (pool) => {
                         if (selectErr) return rollback(selectErr);
 
                         const saveItems = (orderId) => {
-                            connection.query('DELETE FROM order_items WHERE order_id = ?', [orderId], (deleteErr) => {
-                                if (deleteErr) return rollback(deleteErr);
+                            connection.query(
+                                `
+                                    UPDATE orders
+                                    SET status = 'Pending',
+                                        cancellation_status = 'none',
+                                        cancellation_reason = NULL,
+                                        cancellation_requested_at = NULL,
+                                        cancellation_decided_at = NULL,
+                                        cancellation_decided_by = NULL
+                                    WHERE order_id = ?
+                                `,
+                                [orderId],
+                                (resetErr) => {
+                                    if (resetErr) return rollback(resetErr);
 
-                                if (cleaned.length === 0) {
-                                    return connection.commit((commitErr) => {
-                                        connection.release();
-                                        if (commitErr) return res.status(500).json({ error: commitErr.message });
-                                        res.json({ message: 'Session items saved successfully!', order_id: orderId, items: [] });
-                                    });
-                                }
+                                    connection.query('DELETE FROM order_items WHERE order_id = ?', [orderId], (deleteErr) => {
+                                        if (deleteErr) return rollback(deleteErr);
 
-                                const values = cleaned.map((item) => [orderId, item.menuId, item.quantity, item.note ?? '']);
-                                connection.query('INSERT INTO order_items (order_id, menu_id, quantity, note) VALUES ?', [values], (insertErr) => {
-                                    if (insertErr) return rollback(insertErr);
+                                        if (cleaned.length === 0) {
+                                            return connection.commit((commitErr) => {
+                                                connection.release();
+                                                if (commitErr) return res.status(500).json({ error: commitErr.message });
+                                                res.json({ message: 'Session items saved successfully!', order_id: orderId, items: [] });
+                                            });
+                                        }
 
-                                    connection.commit((commitErr) => {
-                                        connection.release();
-                                        if (commitErr) return res.status(500).json({ error: commitErr.message });
-                                        res.json({
-                                            message: 'Session items saved successfully!',
-                                            order_id: orderId,
-                                            items: cleaned.map((item) => ({ menu_id: item.menuId, quantity: item.quantity, note: item.note ?? '' })),
+                                        const values = cleaned.map((item) => [orderId, item.menuId, item.quantity, item.note ?? '']);
+                                        connection.query('INSERT INTO order_items (order_id, menu_id, quantity, note) VALUES ?', [values], (insertErr) => {
+                                            if (insertErr) return rollback(insertErr);
+
+                                            connection.commit((commitErr) => {
+                                                connection.release();
+                                                if (commitErr) return res.status(500).json({ error: commitErr.message });
+                                                res.json({
+                                                    message: 'Session items saved successfully!',
+                                                    order_id: orderId,
+                                                    items: cleaned.map((item) => ({ menu_id: item.menuId, quantity: item.quantity, note: item.note ?? '' })),
+                                                });
+                                            });
                                         });
                                     });
-                                });
-                            });
+                                },
+                            );
                         };
 
                         if (orders.length > 0) {
