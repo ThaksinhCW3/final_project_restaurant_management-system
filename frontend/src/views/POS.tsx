@@ -526,7 +526,6 @@ export default function POS({
                   <button
                     className="pos-bill-pay is-confirm"
                     disabled={
-                      !selectedSession.orderStatus ||
                       selectedSession.items.length === 0 ||
                       selectedSession.cancellationStatus === "pending"
                     }

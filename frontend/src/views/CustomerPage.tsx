@@ -1,7 +1,7 @@
 import { Bell, Check, Home, Minus, Plus, Receipt, Search, ShoppingBag, Utensils, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { kip, parseCurrency } from "../config/constants";
-import type { MenuItem, MenuOptionGroup, MenuOptionValue, SaleItem, SessionItem } from "../types";
+import type { IngredientItem, MenuItem, MenuOptionGroup, MenuOptionValue, RecipeItem, SaleItem, SessionItem } from "../types";
 import olayLogo from "../assets/logo/olaylogo.png";
 import "./CustomerPage.css";
 
@@ -12,6 +12,8 @@ type CustomerPageProps = {
   menu: MenuItem[];
   categories: any[];
   sales: SaleItem[];
+  ingredients: IngredientItem[];
+  recipes: RecipeItem[];
   submitOrder: (sessionId: string, items: Array<{ id: number; qty: number; note?: string | null }>) => void | Promise<void>;
   requestPayment: (sessionId: string) => void | Promise<void>;
   requestCancellation: (sessionId: string, reason: string) => void | Promise<void>;
@@ -58,6 +60,8 @@ export default function CustomerPage({
   menu,
   categories,
   sales,
+  ingredients,
+  recipes,
   submitOrder,
   requestPayment,
   requestCancellation,
@@ -75,6 +79,7 @@ export default function CustomerPage({
   const [orderNoticeOpen, setOrderNoticeOpen] = useState(false);
   const [orderNoticeTitle, setOrderNoticeTitle] = useState("ຄົວໄດ້ຮັບອໍເດີແລ້ວ");
   const [orderNoticeDetail, setOrderNoticeDetail] = useState("ກຳລັງຈັດກຽມອາຫານໃຫ້ທ່ານ");
+  const [orderNoticeTone, setOrderNoticeTone] = useState<"success" | "warning">("success");
   const [cartDraftDirty, setCartDraftDirty] = useState(false);
   const [addingMore, setAddingMore] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -97,7 +102,6 @@ export default function CustomerPage({
   const canOrder = Boolean(
     session &&
     !waitingPayment &&
-    !orderReceived &&
     !cancellationPending &&
     (!orderSubmitted || addingMore),
   );
@@ -112,25 +116,68 @@ export default function CustomerPage({
           ? { label: "ກຳລັງກະກຽມອາຫານ", tone: "preparing" }
           : null;
 
-  const availableMenu = menu.filter((item) => item.ok !== false);
+  const recipesByMenu = useMemo(() => {
+    const next = new Map<number, RecipeItem[]>();
+    recipes.forEach((recipe) => {
+      if (!recipe.menuId) return;
+      next.set(recipe.menuId, [...(next.get(recipe.menuId) ?? []), recipe]);
+    });
+    return next;
+  }, [recipes]);
+  const ingredientStockById = useMemo(
+    () => new Map(ingredients.map((item) => [item.id, item.stockQuantity])),
+    [ingredients],
+  );
+  const menuStockLimit = (item: MenuItem): number => {
+    if (item.ok === false) return 0;
+
+    const itemRecipes = recipesByMenu.get(item.id) ?? [];
+    if (itemRecipes.length === 0) return Number.POSITIVE_INFINITY;
+
+    const limits = itemRecipes
+      .map((recipe) => {
+        const used = Number(recipe.quantityUsed);
+        if (!Number.isFinite(used) || used <= 0) return Number.POSITIVE_INFINITY;
+        const stockQuantity = ingredientStockById.get(recipe.ingredientId) ?? 0;
+        return Math.floor(stockQuantity / used);
+      })
+      .filter((value) => Number.isFinite(value));
+
+    if (limits.length === 0) return Number.POSITIVE_INFINITY;
+    return Math.max(0, Math.min(...limits));
+  };
+  const menuIsUnavailable = (item: MenuItem) => menuStockLimit(item) <= 0;
+  const showOrderNotice = (
+    title: string,
+    detail: string,
+    tone: "success" | "warning" = "success",
+  ) => {
+    setOrderNoticeTitle(title);
+    setOrderNoticeDetail(detail);
+    setOrderNoticeTone(tone);
+    setOrderNoticeOpen(true);
+    window.setTimeout(() => setOrderNoticeOpen(false), tone === "warning" ? 2400 : 1800);
+  };
+
+  const customerMenu = menu;
   const categoryNames = useMemo(
     () => {
       const fromDatabase = categories
         .map((item) => item.category_name ?? item.categoryName ?? item.name)
         .filter(Boolean);
-      const fromMenu = availableMenu.map((item) => item.cat).filter(Boolean);
+      const fromMenu = customerMenu.map((item) => item.cat).filter(Boolean);
       return ["ທັງໝົດ", ...Array.from(new Set([...fromDatabase, ...fromMenu]))];
     },
-    [availableMenu, categories],
+    [customerMenu, categories],
   );
   const categoryCards = categoryNames
     .filter((item) => item !== "ທັງໝົດ")
     .slice(0, 6)
     .map((name) => ({
       name,
-      item: availableMenu.find((entry) => entry.cat === name),
+      item: customerMenu.find((entry) => entry.cat === name),
     }));
-  const visibleMenu = availableMenu
+  const visibleMenu = customerMenu
     .filter((item) => category === "ທັງໝົດ" || item.cat === category)
     .filter((item) => {
       const term = search.trim().toLowerCase();
@@ -151,7 +198,7 @@ export default function CustomerPage({
   }, [sales]);
   const recommendedItems = useMemo(
     () =>
-      [...availableMenu]
+      [...customerMenu]
         .sort((a, b) => {
           const quantityDifference =
             (soldQuantityByMenu.get(b.id) ?? b.sold ?? 0) -
@@ -159,7 +206,7 @@ export default function CustomerPage({
           return quantityDifference || a.name.localeCompare(b.name);
         })
         .slice(0, 2),
-    [availableMenu, soldQuantityByMenu],
+    [customerMenu, soldQuantityByMenu],
   );
   const popularItems = [...visibleMenu]
     .sort((a, b) => (b.sold ?? 0) - (a.sold ?? 0))
@@ -378,6 +425,30 @@ export default function CustomerPage({
 
   const addSelectedMenu = () => {
     if (session && selectedMenu) {
+      const stockLimit = menuStockLimit(selectedMenu);
+      const source = orderSubmitted && !cartDraftDirty ? sessionCartLines : cartLines;
+      const sourceWithoutEditing = editingCartLineKey
+        ? source.filter((line) => line.key !== editingCartLineKey)
+        : source;
+      const nextMenuQty =
+        sourceWithoutEditing
+          .filter((line) => line.menuId === selectedMenu.id)
+          .reduce((sum, line) => sum + line.qty, 0) + detailQty;
+
+      if (stockLimit <= 0) {
+        showOrderNotice("Out of stock", `${selectedMenu.name} is not available right now.`, "warning");
+        return;
+      }
+
+      if (Number.isFinite(stockLimit) && nextMenuQty > stockLimit) {
+        showOrderNotice(
+          "Not enough stock",
+          `Stock can make only ${stockLimit} ${selectedMenu.name}.`,
+          "warning",
+        );
+        return;
+      }
+
       const optionSignature = selectedOptionValues
         .map((option) => `${option.groupName}:${option.valueName}:${option.priceDelta}`)
         .sort()
@@ -451,10 +522,17 @@ export default function CustomerPage({
       );
       setCartDraftDirty(false);
       setAddingMore(false);
-      setOrderNoticeTitle(isUpdate ? "ອັບເດດອໍເດີແລ້ວ" : "ຄົວໄດ້ຮັບອໍເດີແລ້ວ");
-      setOrderNoticeDetail(isUpdate ? "ຄົວໄດ້ຮັບລາຍການເພີ່ມແລ້ວ" : "ກຳລັງຈັດກຽມອາຫານໃຫ້ທ່ານ");
-      setOrderNoticeOpen(true);
-      window.setTimeout(() => setOrderNoticeOpen(false), 1800);
+      showOrderNotice(
+        isUpdate ? "ອັບເດດອໍເດີແລ້ວ" : "ຄົວໄດ້ຮັບອໍເດີແລ້ວ",
+        isUpdate ? "ຄົວໄດ້ຮັບລາຍການເພີ່ມແລ້ວ" : "ກຳລັງຈັດກຽມອາຫານໃຫ້ທ່ານ",
+      );
+    } catch (err) {
+      const apiError = err as { response?: { data?: { message?: string; error?: string } } };
+      showOrderNotice(
+        "Not enough stock",
+        apiError.response?.data?.message ?? apiError.response?.data?.error ?? "Some items are no longer available.",
+        "warning",
+      );
     } finally {
       setSubmittingOrder(false);
     }
@@ -620,20 +698,44 @@ export default function CustomerPage({
                       <div className="customer-order-actions">
                         <button
                           type="button"
-                          className="customer-cancel-button"
-                          onClick={openCancellationDialog}
+                          disabled={cancellationPending}
+                          onClick={() => {
+                            setCartLines(sessionCartLines);
+                            setCartDraftDirty(false);
+                            setAddingMore(true);
+                            setTab("menu");
+                          }}
                         >
-                          ຂໍຍົກເລີກ
+                          ສັ່ງເພີ່ມ
                         </button>
-                        <button
-                          type="button"
-                          disabled={cartItems.length === 0 || submittingOrder}
-                          onClick={() => requestPayment(session.id)}
-                        >
-                          <Receipt size={18} />
-                          ຂໍຊໍາລະ
-                        </button>
+                        {hasPendingOrderUpdate ? (
+                          <button
+                            type="button"
+                            disabled={cancellationPending || submittingOrder}
+                            onClick={submitCartOrder}
+                          >
+                            ອັບເດດອໍເດີ
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={cartItems.length === 0 || submittingOrder}
+                            onClick={() => requestPayment(session.id)}
+                          >
+                            <Receipt size={18} />
+                            ຂໍຊໍາລະ
+                          </button>
+                        )}
                       </div>
+                    )}
+                    {!cancellationPending && !hasPendingOrderUpdate && (
+                      <button
+                        type="button"
+                        className="customer-cancel-order"
+                        onClick={openCancellationDialog}
+                      >
+                        ຂໍຍົກເລີກອໍເດີ
+                      </button>
                     )}
                   </div>
               ) : orderSubmitted ? (
@@ -725,21 +827,27 @@ export default function CustomerPage({
                 <>
                   <section className="customer-mobile-promos">
                     <h2>ເມນູຂາຍດີທີ່ຢາກແນະນຳ</h2>
-                    {recommendedItems.map((item, index) => (
-                      <button
-                        type="button"
-                        key={item.id}
-                        className={`customer-mobile-promo ${index === 1 ? "customer-mobile-promo--gold" : ""}`}
-                        onClick={() => openMenuDetail(item)}
-                      >
-                        <div>
-                          <strong>{item.name}</strong>
-                          <span>{item.cat} · {kip(item.price)}</span>
-                          <em>ສັ່ງຕອນນີ້</em>
-                        </div>
-                        <div className="customer-mobile-promo-image">{renderMenuImage(item)}</div>
-                      </button>
-                    ))}
+                    {recommendedItems.map((item, index) => {
+                      const unavailable = menuIsUnavailable(item);
+
+                      return (
+                        <button
+                          type="button"
+                          key={item.id}
+                          className={`customer-mobile-promo ${index === 1 ? "customer-mobile-promo--gold" : ""} ${unavailable ? "is-unavailable" : ""}`}
+                          disabled={unavailable}
+                          onClick={() => openMenuDetail(item)}
+                        >
+                          {unavailable && <b className="customer-stock-badge">Out of stock</b>}
+                          <div>
+                            <strong>{item.name}</strong>
+                            <span>{item.cat} · {kip(item.price)}</span>
+                            <em>{unavailable ? "Out of stock" : "ສັ່ງຕອນນີ້"}</em>
+                          </div>
+                          <div className="customer-mobile-promo-image">{renderMenuImage(item)}</div>
+                        </button>
+                      );
+                    })}
                   </section>
 
                   <section className="customer-mobile-section">
@@ -774,24 +882,30 @@ export default function CustomerPage({
                       </div>
                     ) : (
                       <div className="customer-mobile-featured-grid">
-                        {featuredItems.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            className="customer-mobile-feature-card"
-                            onClick={() => openMenuDetail(item)}
-                          >
-                            <div className="customer-mobile-feature-image">{renderMenuImage(item)}</div>
-                            <div>
-                              <strong>{item.name}</strong>
-                              <small>{item.cat}</small>
-                              <span>{kip(item.price)}</span>
-                            </div>
-                            <em aria-label="ເພີ່ມເມນູ">
-                              <Plus size={14} />
-                            </em>
-                          </button>
-                        ))}
+                        {featuredItems.map((item) => {
+                          const unavailable = menuIsUnavailable(item);
+
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={`customer-mobile-feature-card ${unavailable ? "is-unavailable" : ""}`}
+                              disabled={unavailable}
+                              onClick={() => openMenuDetail(item)}
+                            >
+                              {unavailable && <b className="customer-stock-badge">Out of stock</b>}
+                              <div className="customer-mobile-feature-image">{renderMenuImage(item)}</div>
+                              <div>
+                                <strong>{item.name}</strong>
+                                <small>{item.cat}</small>
+                                <span>{kip(item.price)}</span>
+                              </div>
+                              <em aria-label={unavailable ? "Out of stock" : "ເພີ່ມເມນູ"}>
+                                {unavailable ? "!" : <Plus size={14} />}
+                              </em>
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </section>
@@ -822,24 +936,30 @@ export default function CustomerPage({
                         <div className="customer-mobile-message">
                           {menu.length === 0 ? "ຍັງບໍ່ມີເມນູຈາກຖານຂໍ້ມູນ." : "ບໍ່ມີເມນູໃນໝວດນີ້."}
                         </div>
-                      ) : popularItems.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          className="customer-mobile-popular-row"
-                          onClick={() => openMenuDetail(item)}
-                        >
-                          <div className="customer-mobile-popular-image">{renderMenuImage(item)}</div>
-                          <div>
-                            <strong>{item.name}</strong>
-                            <small>{item.cat}</small>
-                            <span>{kip(item.price)}</span>
-                          </div>
-                          <em aria-label="ເພີ່ມເມນູ">
-                            <Plus size={14} />
-                          </em>
-                        </button>
-                      ))}
+                      ) : popularItems.map((item) => {
+                        const unavailable = menuIsUnavailable(item);
+
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`customer-mobile-popular-row ${unavailable ? "is-unavailable" : ""}`}
+                            disabled={unavailable}
+                            onClick={() => openMenuDetail(item)}
+                          >
+                            {unavailable && <b className="customer-stock-badge">Out of stock</b>}
+                            <div className="customer-mobile-popular-image">{renderMenuImage(item)}</div>
+                            <div>
+                              <strong>{item.name}</strong>
+                              <small>{item.cat}</small>
+                              <span>{kip(item.price)}</span>
+                            </div>
+                            <em aria-label={unavailable ? "Out of stock" : "ເພີ່ມເມນູ"}>
+                              {unavailable ? "!" : <Plus size={14} />}
+                            </em>
+                          </button>
+                        );
+                      })}
                     </div>
                   </section>
                 </>
@@ -1013,7 +1133,7 @@ export default function CustomerPage({
         </nav>
 
         {orderNoticeOpen && (
-          <div className="customer-order-popup" role="status" aria-live="polite">
+          <div className={`customer-order-popup is-${orderNoticeTone}`} role="status" aria-live="polite">
             <div>
               <Check size={28} />
               <strong>{orderNoticeTitle}</strong>

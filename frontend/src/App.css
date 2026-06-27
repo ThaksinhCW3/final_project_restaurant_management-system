@@ -1339,6 +1339,250 @@
   display: none;
 }
 
+.payment-print-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: rgba(18, 18, 18, 0.48);
+}
+
+.payment-print-card {
+  width: min(760px, 100%);
+  max-height: min(720px, 92vh);
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(260px, 1fr);
+  gap: 22px;
+  overflow: auto;
+  box-sizing: border-box;
+  border: 1px solid rgba(181, 28, 28, 0.16);
+  border-radius: 18px;
+  background: #f8f4f4;
+  padding: 22px;
+  box-shadow: 0 24px 70px rgba(18, 18, 18, 0.24);
+}
+
+.payment-receipt-preview {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.payment-receipt-paper {
+  width: min(100%, 300px);
+  min-height: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+  border: 1px solid rgba(18, 18, 18, 0.1);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #121212;
+  padding: 18px;
+  box-shadow: 0 18px 34px rgba(80, 32, 32, 0.12);
+}
+
+.payment-receipt-brand {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.payment-receipt-brand img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.payment-receipt-brand strong {
+  color: #121212;
+  font-family: var(--heading);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.payment-receipt-brand span,
+.payment-receipt-footer {
+  color: #5a5a5a;
+  font-size: 12px;
+}
+
+.payment-receipt-meta {
+  display: grid;
+  gap: 7px;
+  border-top: 1px dashed rgba(18, 18, 18, 0.26);
+  border-bottom: 1px dashed rgba(18, 18, 18, 0.26);
+  padding: 12px 0;
+}
+
+.payment-receipt-meta div,
+.payment-receipt-total,
+.payment-receipt-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.payment-receipt-meta span {
+  color: #5a5a5a;
+  font-size: 11px;
+}
+
+.payment-receipt-meta strong {
+  color: #121212;
+  font-size: 12px;
+  text-align: right;
+}
+
+.payment-receipt-lines {
+  display: grid;
+  gap: 9px;
+}
+
+.payment-receipt-line {
+  align-items: flex-start;
+  border-bottom: 1px dashed rgba(18, 18, 18, 0.12);
+  padding-bottom: 8px;
+}
+
+.payment-receipt-line div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.payment-receipt-line strong,
+.payment-receipt-line small {
+  overflow-wrap: anywhere;
+}
+
+.payment-receipt-line strong {
+  color: #121212;
+  font-size: 12px;
+}
+
+.payment-receipt-line small {
+  color: #777;
+  font-size: 10px;
+}
+
+.payment-receipt-line span,
+.payment-receipt-line b {
+  flex: 0 0 auto;
+  color: #121212;
+  font-size: 12px;
+}
+
+.payment-receipt-empty {
+  border: 1px dashed rgba(181, 28, 28, 0.22);
+  border-radius: 8px;
+  color: #5a5a5a;
+  padding: 14px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.payment-receipt-total {
+  align-items: center;
+  margin-top: auto;
+  border-top: 2px solid #121212;
+  padding-top: 12px;
+}
+
+.payment-receipt-total span {
+  color: #121212;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.payment-receipt-total strong {
+  color: #d32f2f;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.payment-receipt-footer {
+  text-align: center;
+}
+
+.payment-print-question {
+  align-self: center;
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.payment-print-question > span {
+  color: #15906d;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.payment-print-question h2 {
+  margin: 0;
+  color: #121212;
+  font-family: var(--heading);
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.payment-print-question p {
+  margin: 0;
+  color: #5a5a5a;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.payment-print-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.payment-print-actions button {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.payment-print-no {
+  border: 1px solid rgba(181, 28, 28, 0.18);
+  background: #ffffff;
+  color: #7e1a1a;
+}
+
+.payment-print-yes {
+  border: 0;
+  background: #15906d;
+  color: #ffffff;
+}
+
+@media (max-width: 720px) {
+  .payment-print-card {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-print-question {
+    order: -1;
+  }
+}
+
 .pos-add-overlay {
   position: fixed;
   inset: 0;

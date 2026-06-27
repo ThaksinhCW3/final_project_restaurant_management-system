@@ -11,6 +11,7 @@ import {
   Bell,
   CheckCircle,
   AlertTriangle,
+  Printer,
 } from "lucide-react";
 import {
   C,
@@ -57,6 +58,7 @@ import type {
 } from "./types";
 import type { AppModalState } from "./types/app";
 import { apiClient } from "./api/client";
+import { printOrderBill } from "./utils/printOrderBill";
 import "./index.css";
 import "./App.css";
 import logoImage from "./assets/logo/olaylogo.png"
@@ -176,6 +178,7 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState<number>(66);
   const [sidebarHidden, setSidebarHidden] = useState<boolean>(false);
   const [modal, setModal] = useState<AppModalState>(null);
+  const [paymentPrintPrompt, setPaymentPrintPrompt] = useState<SessionItem | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [loaded, setLoaded] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() =>
@@ -649,7 +652,11 @@ export default function App() {
       : [...session.items, { id: menuId, qty: safeQuantity, note: cleanNote }];
 
     setSessions((prev) =>
-      prev.map((item) => (item.id === sessionId ? { ...item, items } : item)),
+      prev.map((item) =>
+        item.id === sessionId
+          ? { ...item, items, orderStatus: items.length > 0 ? "pending" : null }
+          : item,
+      ),
     );
 
     try {
@@ -659,7 +666,7 @@ export default function App() {
       const apiError = getApiErrorInfo(err);
       setSessions((prev) =>
         prev.map((item) =>
-          item.id === sessionId ? { ...item, items: session.items } : item,
+          item.id === sessionId ? session : item,
         ),
       );
       toast(apiError.message || "ບັນທຶກລາຍການບິນບໍ່ສຳເລັດ", "error");
@@ -682,7 +689,11 @@ export default function App() {
         : session.items.filter((item) => !(item.id === menuId && String(item.note ?? "").trim() === cleanNote));
 
     setSessions((prev) =>
-      prev.map((item) => (item.id === sessionId ? { ...item, items } : item)),
+      prev.map((item) =>
+        item.id === sessionId
+          ? { ...item, items, orderStatus: items.length > 0 ? "pending" : null }
+          : item,
+      ),
     );
 
     try {
@@ -692,7 +703,7 @@ export default function App() {
       const apiError = getApiErrorInfo(err);
       setSessions((prev) =>
         prev.map((item) =>
-          item.id === sessionId ? { ...item, items: session.items } : item,
+          item.id === sessionId ? session : item,
         ),
       );
       toast(apiError.message || "ບັນທຶກລາຍການບິນບໍ່ສຳເລັດ", "error");
@@ -727,7 +738,11 @@ export default function App() {
       : [...remainingItems, { id: menuId, qty: safeQuantity, note: cleanNextNote }];
 
     setSessions((prev) =>
-      prev.map((item) => (item.id === sessionId ? { ...item, items } : item)),
+      prev.map((item) =>
+        item.id === sessionId
+          ? { ...item, items, orderStatus: items.length > 0 ? "pending" : null }
+          : item,
+      ),
     );
 
     try {
@@ -737,7 +752,7 @@ export default function App() {
       const apiError = getApiErrorInfo(err);
       setSessions((prev) =>
         prev.map((item) =>
-          item.id === sessionId ? { ...item, items: session.items } : item,
+          item.id === sessionId ? session : item,
         ),
       );
       toast(apiError.message || "ບັນທຶກລາຍການບິນບໍ່ສຳເລັດ", "error");
@@ -1614,23 +1629,35 @@ export default function App() {
       const order = (orders as any[]).find(
         (row) => (row.session_id ?? row.sessionId) === sessionNumericId,
       );
-      const orderId = order?.order_id ?? order?.orderId;
+      const orderId = session.orderId ?? order?.order_id ?? order?.orderId;
 
-      if (orderId) {
-        await apiClient.orders.update(orderId, {
-          session_id: sessionNumericId,
-          staff_id: session.staffId ?? null,
-          status: "Served",
-        });
+      if (!orderId) {
+        toast("ບໍ່ພົບອໍເດີທີ່ບັນທຶກແລ້ວ", "error");
+        return;
       }
 
-      setSessions((p) =>
-        p.map((x) => (x.id === id ? { ...x, orderStatus: "ready" } : x)),
-      );
+      await apiClient.orders.update(orderId, {
+        session_id: sessionNumericId,
+        staff_id: currentUser?.id ?? session.staffId ?? null,
+        status: "Served",
+      });
+
+      const [nextSessions, nextTables] = await Promise.all([
+        apiClient.sessions.getAll(),
+        apiClient.tables.getAll(),
+      ]);
+      setSessions(nextSessions);
+      setTables(nextTables);
       toast(`ຢືນຢັນອໍເດີ ${id} ແລ້ວ`, "success");
     } catch (err) {
       console.error("Confirm order received failed", err);
-      toast("ຢືນຢັນອໍເດີບໍ່ສຳເລັດ", "error");
+      const apiError = getApiErrorInfo(err);
+      if (apiError.status === 401) {
+        toast("Login expired. Please log in again.", "error");
+        logout();
+        return;
+      }
+      toast(apiError.message || "ຢືນຢັນອໍເດີບໍ່ສຳເລັດ", "error");
     }
   };
 
@@ -1781,6 +1808,10 @@ export default function App() {
       await refreshTables();
       if (selSession === id) setSelSession(null);
       setModal(null);
+      setPaymentPrintPrompt({
+        ...session,
+        items: session.items.map((item) => ({ ...item })),
+      });
       paymentLocks.current.delete(id);
       toast(`ຊໍາລະ ${id} ສຳເລັດ`, "success");
     } catch (err) {
@@ -2024,6 +2055,22 @@ export default function App() {
   const customerSession = billId
     ? sessions.find((session) => session.id === billId)
     : null;
+  const paymentPrintRows = paymentPrintPrompt
+    ? paymentPrintPrompt.items.flatMap((item) => {
+        const menuItem = menu.find((entry) => entry.id === item.id);
+        if (!menuItem) return [];
+
+        return [{
+          item,
+          menuItem,
+          lineTotal: menuItem.price * item.qty,
+        }];
+      })
+    : [];
+  const paymentPrintTotal = paymentPrintRows.reduce(
+    (sum, row) => sum + row.lineTotal,
+    0,
+  );
 
   if (billId || isCustomerPage) {
     return (
@@ -2034,6 +2081,8 @@ export default function App() {
         menu={menu}
         categories={categories}
         sales={sales}
+        ingredients={ingredients}
+        recipes={recipes}
         submitOrder={submitCustomerOrder}
         requestPayment={requestPayment}
         requestCancellation={requestOrderCancellation}
@@ -2460,6 +2509,71 @@ export default function App() {
 
       {modal?.type === "qr-display" && (
         <QrDisplayModal modal={modal} onClose={() => setModal(null)} />
+      )}
+
+      {paymentPrintPrompt && (
+        <div className="payment-print-layer" role="dialog" aria-modal="true" aria-labelledby="payment-print-title">
+          <div className="payment-print-card">
+            <div className="payment-receipt-preview" aria-label="Bill preview">
+              <div className="payment-receipt-paper">
+                <div className="payment-receipt-brand">
+                  <img src={logoImage} alt="OlayFood" />
+                  <strong>ໂອເລຟູດ</strong>
+                  <span>ບິນຊໍາລະ</span>
+                </div>
+                <div className="payment-receipt-meta">
+                  <div><span>ບິນ</span><strong>{paymentPrintPrompt.id}</strong></div>
+                  <div><span>ປະເພດ</span><strong>{paymentPrintPrompt.sessionType === "takeaway" ? "ກັບບ້ານ" : "ທານທີ່ຮ້ານ"}</strong></div>
+                  <div><span>ໝາຍເຫດ</span><strong>{paymentPrintPrompt.note || "-"}</strong></div>
+                  <div><span>ເປີດເມື່ອ</span><strong>{paymentPrintPrompt.createdAt || "-"}</strong></div>
+                </div>
+                <div className="payment-receipt-lines">
+                  {paymentPrintRows.length === 0 ? (
+                    <div className="payment-receipt-empty">ບໍ່ມີລາຍການໃນບິນ</div>
+                  ) : paymentPrintRows.map((row, index) => (
+                    <div className="payment-receipt-line" key={`${row.menuItem.id}-${index}`}>
+                      <div>
+                        <strong>{row.menuItem.name}</strong>
+                        {row.item.note && <small>{row.item.note}</small>}
+                      </div>
+                      <span>x{row.item.qty}</span>
+                      <b>{kip(row.lineTotal)}</b>
+                    </div>
+                  ))}
+                </div>
+                <div className="payment-receipt-total">
+                  <span>ລວມ</span>
+                  <strong>{kip(paymentPrintTotal)}</strong>
+                </div>
+                <div className="payment-receipt-footer">ຂອບໃຈ</div>
+              </div>
+            </div>
+            <div className="payment-print-question">
+              <span>ບັນທຶກການຊໍາລະແລ້ວ</span>
+              <h2 id="payment-print-title">ຕ້ອງການພິມບິນບໍ?</h2>
+              <p>ກວດເບິ່ງບິນດ້ານຊ້າຍ ແລ້ວເລືອກ Yes ເພື່ອພິມ ຫຼື No ເພື່ອປິດ.</p>
+              <div className="payment-print-actions">
+                <button
+                  type="button"
+                  className="payment-print-no"
+                  onClick={() => setPaymentPrintPrompt(null)}
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  className="payment-print-yes"
+                  onClick={() => {
+                    printOrderBill(paymentPrintPrompt, menu);
+                    setPaymentPrintPrompt(null);
+                  }}
+                >
+                  <Printer size={15} /> Yes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {latestErrorToast && (
