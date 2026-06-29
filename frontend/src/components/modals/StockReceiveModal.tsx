@@ -41,7 +41,7 @@ export default function StockReceiveModal({
   isAdmin,
 }: Props) {
   const mode = modal.data.mode ?? "create";
-  const items = modal.data.items ?? [];
+  const items: any[] = modal.data.items ?? [];
 
   const setItems = (nextItems: any[]) => setField("items", nextItems);
   const firstStock = stock[0];
@@ -51,9 +51,13 @@ export default function StockReceiveModal({
       ...items,
       {
         ingredientId: ingredient?.id ?? "",
+        ingredientName: ingredient?.name ?? "",
+        unit: ingredient?.unit ?? "",
         qty: "",
+        minQty: 0,
         unitPrice: ingredient?.costPerUnit ? ingredient.costPerUnit.toLocaleString("en-US") : "",
         supplierId: ingredient?.supplierId ?? suppliers[0]?.id ?? "",
+        locked: false,
       },
     ]);
   };
@@ -61,16 +65,31 @@ export default function StockReceiveModal({
     const nextItems = [...items];
     const nextItem = { ...nextItems[index], [field]: value };
 
+    if (field === "qty") {
+      const nextQty = Number(value);
+      nextItem.qty = String(Math.max(0, Number.isFinite(nextQty) ? nextQty : 0));
+    }
+
     if (field === "ingredientId") {
       const ingredient = stock.find((item) => String(item.id) === String(value));
+      nextItem.ingredientName = ingredient?.name ?? "";
+      nextItem.unit = ingredient?.unit ?? "";
       nextItem.unitPrice = ingredient?.costPerUnit ? ingredient.costPerUnit.toLocaleString("en-US") : "";
       nextItem.supplierId = ingredient?.supplierId ?? nextItem.supplierId ?? suppliers[0]?.id ?? "";
+      nextItem.minQty = Number(nextItem.minQty ?? 0);
     }
 
     nextItems[index] = nextItem;
     setItems(nextItems);
   };
   const removeRow = (index: number) => setItems(items.filter((_: any, i: number) => i !== index));
+  const updateRowsSupplier = (indexes: number[], supplierId: string) => {
+    setItems(
+      items.map((item: any, index: number) =>
+        indexes.includes(index) ? { ...item, supplierId } : item,
+      ),
+    );
+  };
 
   const plannedTotal = items.reduce(
     (sum: number, item: any) => sum + Number(item.qty || 0) * parseMoney(item.unitPrice),
@@ -81,105 +100,185 @@ export default function StockReceiveModal({
       sum + Number(item.receivedQuantity || 0) * parseMoney(item.actualUnitPrice),
     0,
   );
+  const createLineTotal = (item: any) => Number(item.qty || 0) * parseMoney(item.unitPrice);
+  const createBillGroups = items.reduce<
+    {
+      key: string;
+      supplierId: string | number | "";
+      supplierName: string;
+      supplierPhone?: string | null;
+      rows: { item: any; index: number }[];
+      total: number;
+    }[]
+  >((groups, item: any, index: number) => {
+    const supplierId = item.supplierId ?? "";
+    const supplier = suppliers.find((entry) => String(entry.id) === String(supplierId));
+    const key = supplierId ? String(supplierId) : "no-supplier";
+    let group = groups.find((entry) => entry.key === key);
+    if (!group) {
+      group = {
+        key,
+        supplierId,
+        supplierName: supplier?.name ?? "ບໍ່ມີຜູ້ສະໜອງ",
+        supplierPhone: supplier?.phone,
+        rows: [],
+        total: 0,
+      };
+      groups.push(group);
+    }
+    group.rows.push({ item, index });
+    group.total += createLineTotal(item);
+    return groups;
+  }, []);
 
   if (mode === "receive") {
     return (
-      <Modal title={modal.title ?? "ກວດສິນຄ້າ"} onClose={onClose} width={920}>
-        <div style={{ display: "grid", gap: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 96px 110px 110px 128px", gap: 10, color: C.textMid, fontSize: 11, textTransform: "uppercase" }}>
-            <span>ສິນຄ້າ</span>
-            <span>ສັ່ງ</span>
-            <span>ຮັບຈິງ</span>
-            <span>ລາຄາຈິງ</span>
-            <span>ລວມ</span>
+      <Modal title={modal.title ?? "ກວດສິນຄ້າ"} onClose={onClose} width={980}>
+        <div style={{ background: "#fffdf8", border: "1px solid rgba(58,120,184,0.28)", borderRadius: 8, padding: 16, boxShadow: "0 14px 30px rgba(35,10,10,0.06)", color: C.text }}>
+          <div style={{ textAlign: "center", color: C.blue, fontSize: 22, fontWeight: 900, marginBottom: 4 }}>ໃບກວດສິນຄ້າ</div>
+          <div style={{ textAlign: "center", color: C.textDim, fontSize: 12, marginBottom: 12 }}>RECEIVING BILL</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, fontSize: 12, color: C.textDim, marginBottom: 12 }}>
+            <span>ຜູ້ສະໜອງ: <strong style={{ color: C.text }}>{modal.data.supplierName || "—"}</strong></span>
+            <span>ໃບສັ່ງ #{modal.data.orderId}</span>
+            <span>ວັນທີ: {new Date().toLocaleDateString()}</span>
           </div>
-          {items.map((item: any, index: number) => {
-            const ingredient = stock.find((entry) => entry.id === Number(item.ingredientId));
-            const lineTotal = Number(item.receivedQuantity || 0) * parseMoney(item.actualUnitPrice);
-            return (
-              <div key={item.detailId ?? index} style={{ display: "grid", gridTemplateColumns: "1fr 96px 110px 110px 128px", gap: 10, alignItems: "center" }}>
-                <div>
-                  <div style={{ color: C.text, fontWeight: 700, fontSize: 13 }}>{item.ingredientName}</div>
-                  <div style={{ color: C.textDim, fontSize: 11 }}>
-                    {kip(item.unitPrice)} / {ingredient?.unit ?? ""}
-                  </div>
-                </div>
-                <div style={{ color: C.textDim, fontSize: 13 }}>
-                  {item.orderedQuantity} {ingredient?.unit ?? ""}
-                </div>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={item.receivedQuantity}
-                  onChange={(e) => updateRow(index, "receivedQuantity", e.target.value)}
-                  style={inputStyle}
-                />
-                <input
-                  value={formatCurrencyInput(item.actualUnitPrice ?? "")}
-                  onChange={(e) => updateRow(index, "actualUnitPrice", formatCurrencyInput(e.target.value))}
-                  style={inputStyle}
-                />
-                <strong style={{ color: C.gold, textAlign: "right" }}>{kip(lineTotal)}</strong>
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 760 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "42px minmax(170px,1fr) 100px 124px 124px 120px", gap: 8, padding: "8px 0", borderTop: `1px solid ${C.blue}`, borderBottom: `1px solid ${C.blue}`, color: C.blue, fontSize: 12, fontWeight: 800 }}>
+                <span>No.</span>
+                <span>ລາຍການ</span>
+                <span>ສັ່ງ</span>
+                <span>ໄດ້ຮັບຈິງ</span>
+                <span>ລາຄາຈິງ</span>
+                <span style={{ textAlign: "right" }}>ລວມ</span>
               </div>
-            );
-          })}
-        </div>
-        <div style={{ border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 14px", margin: "16px 0", display: "flex", justifyContent: "space-between", gap: 12 }}>
-          <span style={{ color: C.textMid, fontSize: 12 }}>ລວມຕາມທີ່ກວດແລ້ວ</span>
-          <strong style={{ color: C.gold }}>{kip(checkedTotal)}</strong>
+              {items.map((item: any, index: number) => {
+                const ingredient = stock.find((entry) => entry.id === Number(item.ingredientId));
+                const lineTotal = Number(item.receivedQuantity || 0) * parseMoney(item.actualUnitPrice);
+                return (
+                  <div key={item.detailId ?? index} style={{ display: "grid", gridTemplateColumns: "42px minmax(170px,1fr) 100px 124px 124px 120px", gap: 8, minHeight: 48, alignItems: "center", borderBottom: "1px solid rgba(58,120,184,0.20)", fontSize: 13 }}>
+                    <span style={{ color: C.textDim }}>{index + 1}</span>
+                    <div>
+                      <div style={{ color: C.text, fontWeight: 800 }}>{item.ingredientName}</div>
+                      <div style={{ color: C.textDim, fontSize: 11 }}>{kip(item.unitPrice)} / {ingredient?.unit ?? ""}</div>
+                    </div>
+                    <span style={{ color: C.textDim }}>{item.orderedQuantity} {ingredient?.unit ?? ""}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={item.receivedQuantity}
+                      onChange={(e) => updateRow(index, "receivedQuantity", e.target.value)}
+                      style={inputStyle}
+                    />
+                    <input
+                      value={formatCurrencyInput(item.actualUnitPrice ?? "")}
+                      onChange={(e) => updateRow(index, "actualUnitPrice", formatCurrencyInput(e.target.value))}
+                      style={inputStyle}
+                    />
+                    <strong style={{ color: C.gold, textAlign: "right" }}>{kip(lineTotal)}</strong>
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, paddingTop: 12 }}>
+                <span style={{ color: C.textDim, fontWeight: 800 }}>TOTAL</span>
+                <strong style={{ color: C.gold, minWidth: 120, textAlign: "right" }}>{kip(checkedTotal)}</strong>
+              </div>
+            </div>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <Btn variant="secondary" onClick={onClose}>ຍົກເລີກ</Btn>
-          <Btn onClick={submitReceive}>ກວດແລ້ວ ເພີ່ມເຂົ້າຄັງ</Btn>
+          <Btn onClick={submitReceive}>ບັນທຶກ</Btn>
         </div>
       </Modal>
     );
   }
 
   return (
-    <Modal title={modal.title ?? "ຮັບເຂົ້າ"} onClose={onClose} width={960}>
-      <div style={{ display: "grid", gap: 12 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 84px 110px 1fr 42px", gap: 10, color: C.textMid, fontSize: 11, textTransform: "uppercase" }}>
-          <span>ສິນຄ້າ</span>
-          <span>ຈຳນວນ</span>
-          <span>ຫົວໜ່ວຍ</span>
-          <span>ລາຄາ</span>
-          <span>ຜູ້ສະໜອງ</span>
-          <span />
-        </div>
-        {items.map((item: any, index: number) => {
-          const ingredient = stock.find((entry) => String(entry.id) === String(item.ingredientId));
-          return (
-            <div key={index} style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 84px 110px 1fr 42px", gap: 10, alignItems: "center" }}>
-              <select value={item.ingredientId ?? ""} onChange={(e) => updateRow(index, "ingredientId", e.target.value)} style={inputStyle}>
-                <option value="">ເລືອກສິນຄ້າ</option>
-                {stock.map((stockItem) => (
-                  <option key={stockItem.id} value={stockItem.id}>{stockItem.name}</option>
-                ))}
-              </select>
-              <input type="number" min="0" step="0.01" value={item.qty ?? ""} onChange={(e) => updateRow(index, "qty", e.target.value)} style={inputStyle} />
-              <span style={{ color: C.textDim, fontSize: 13 }}>{ingredient?.unit ?? "—"}</span>
-              <input value={formatCurrencyInput(item.unitPrice ?? "")} onChange={(e) => updateRow(index, "unitPrice", formatCurrencyInput(e.target.value))} style={inputStyle} />
-              <select value={item.supplierId ?? ""} onChange={(e) => updateRow(index, "supplierId", e.target.value)} style={inputStyle}>
-                <option value="">ເລືອກ</option>
+    <Modal title={modal.title ?? "ສັ່ງຊື້"} onClose={onClose} width={1060}>
+      <div style={{ display: "grid", gap: 14 }}>
+        {createBillGroups.map((group) => (
+          <div key={group.key} style={{ background: "#fffdf8", border: "1px solid rgba(58,120,184,0.28)", borderRadius: 8, padding: 16, boxShadow: "0 14px 30px rgba(35,10,10,0.06)", color: C.text }}>
+            <div style={{ textAlign: "center", color: C.blue, fontSize: 22, fontWeight: 900, marginBottom: 4 }}>ໃບສັ່ງຊື້</div>
+            <div style={{ textAlign: "center", color: C.textDim, fontSize: 12, marginBottom: 12 }}>PURCHASE ORDER</div>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(180px,1fr) minmax(220px,320px) auto", gap: 10, alignItems: "center", fontSize: 12, color: C.textDim, marginBottom: 12 }}>
+              <span>ຜູ້ສະໜອງ: <strong style={{ color: C.text }}>{group.supplierName}</strong></span>
+              <select
+                value={group.supplierId ?? ""}
+                onChange={(e) => updateRowsSupplier(group.rows.map((row) => row.index), e.target.value)}
+                style={inputStyle}
+              >
+                <option value="">ເລືອກຜູ້ສະໜອງ</option>
                 {suppliers.map((supplier) => (
                   <option key={supplier.id} value={supplier.id}>
                     {supplier.name}{supplier.phone ? ` - ${supplier.phone}` : ""}
                   </option>
                 ))}
               </select>
-              <button
-                type="button"
-                onClick={() => removeRow(index)}
-                disabled={items.length <= 1}
-                style={{ width: 38, height: 38, borderRadius: 10, border: "1px solid rgba(208,64,48,0.3)", background: "rgba(208,64,48,0.08)", color: C.red, cursor: items.length <= 1 ? "not-allowed" : "pointer", opacity: items.length <= 1 ? 0.45 : 1 }}
-              >
-                <Trash2 size={14} />
-              </button>
+              <span>ວັນທີ: {new Date().toLocaleDateString()}</span>
+              {group.supplierPhone && <span>ໂທ: {group.supplierPhone}</span>}
             </div>
-          );
-        })}
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 820 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "42px minmax(170px,1fr) 124px 74px 124px 120px 42px", gap: 8, padding: "8px 0", borderTop: `1px solid ${C.blue}`, borderBottom: `1px solid ${C.blue}`, color: C.blue, fontSize: 12, fontWeight: 800 }}>
+                  <span>No.</span>
+                  <span>ລາຍການ</span>
+                  <span>ຈຳນວນ</span>
+                  <span>ຫົວໜ່ວຍ</span>
+                  <span>ລາຄາ</span>
+                  <span style={{ textAlign: "right" }}>ລວມ</span>
+                  <span />
+                </div>
+                {group.rows.map(({ item, index }, rowIndex) => {
+                  const ingredient = stock.find((entry) => String(entry.id) === String(item.ingredientId));
+                  const minQty = Number(item.minQty ?? 0);
+                  return (
+                    <div key={`${group.key}-${index}`} style={{ display: "grid", gridTemplateColumns: "42px minmax(170px,1fr) 124px 74px 124px 120px 42px", gap: 8, minHeight: 52, alignItems: "center", borderBottom: "1px solid rgba(58,120,184,0.20)", fontSize: 13 }}>
+                      <span style={{ color: C.textDim }}>{rowIndex + 1}</span>
+                      {item.locked ? (
+                        <div>
+                          <div style={{ color: C.text, fontWeight: 800 }}>{item.ingredientName || ingredient?.name || "—"}</div>
+                          {minQty > 0 && <div style={{ color: C.textDim, fontSize: 11 }}>ແນະນຳ {minQty} {ingredient?.unit ?? item.unit ?? ""}</div>}
+                        </div>
+                      ) : (
+                        <select value={item.ingredientId ?? ""} onChange={(e) => updateRow(index, "ingredientId", e.target.value)} style={inputStyle}>
+                          <option value="">ເລືອກສິນຄ້າ</option>
+                          {stock.map((stockItem) => (
+                            <option key={stockItem.id} value={stockItem.id}>{stockItem.name}</option>
+                          ))}
+                        </select>
+                      )}
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={item.qty ?? ""}
+                        onChange={(e) => updateRow(index, "qty", e.target.value)}
+                        style={inputStyle}
+                      />
+                      <span style={{ color: C.textDim, fontSize: 13 }}>{ingredient?.unit ?? item.unit ?? "—"}</span>
+                      <input value={formatCurrencyInput(item.unitPrice ?? "")} onChange={(e) => updateRow(index, "unitPrice", formatCurrencyInput(e.target.value))} style={inputStyle} />
+                      <strong style={{ color: C.gold, textAlign: "right" }}>{kip(createLineTotal(item))}</strong>
+                      <button
+                        type="button"
+                        onClick={() => removeRow(index)}
+                        disabled={items.length <= 1 || item.locked}
+                        style={{ width: 38, height: 38, borderRadius: 10, border: "1px solid rgba(208,64,48,0.3)", background: "rgba(208,64,48,0.08)", color: C.red, cursor: items.length <= 1 || item.locked ? "not-allowed" : "pointer", opacity: items.length <= 1 || item.locked ? 0.45 : 1 }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, paddingTop: 12 }}>
+                  <span style={{ color: C.textDim, fontWeight: 800 }}>TOTAL</span>
+                  <strong style={{ color: C.gold, minWidth: 120, textAlign: "right" }}>{kip(group.total)}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
         <button
           type="button"
           onClick={addCreateRow}
@@ -200,7 +299,7 @@ export default function StockReceiveModal({
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
         <Btn variant="secondary" onClick={onClose}>ຍົກເລີກ</Btn>
         <Btn onClick={submitReceive} disabled={!isAdmin}>
-          {isAdmin ? "Admin confirm" : "Admin only"}
+          {isAdmin ? "ບັນທຶກ" : "Admin only"}
         </Btn>
       </div>
     </Modal>

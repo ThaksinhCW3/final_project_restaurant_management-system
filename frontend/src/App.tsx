@@ -64,6 +64,12 @@ import "./App.css";
 import logoImage from "./assets/logo/olaylogo.png"
 
 type Toast = { id: number; msg: string; type: "success" | "error" | "info" };
+type PurchaseDraftSubmitItem = {
+  ingredientId: number | string;
+  supplierId: number | string;
+  quantity: number | string;
+  unitPrice: number | string;
+};
 type AuthUser = {
   id: number;
   name: string;
@@ -1327,6 +1333,66 @@ export default function App() {
         })
       : toast("ສຳລັບຜູ້ຈັດການເທົ່ານັ້ນ", "error");
 
+  const savePurchaseDraft = async (draftItems: PurchaseDraftSubmitItem[]): Promise<boolean> => {
+    try {
+      if (!isAdmin) {
+        toast("ສຳລັບຜູ້ຈັດການເທົ່ານັ້ນ", "error");
+        return false;
+      }
+
+      const staffId = staff.some((item) => item.id === currentUser?.id)
+        ? currentUser?.id
+        : staff[0]?.id ?? currentUser?.id ?? null;
+      const items = draftItems.map((item) => ({
+        ingredientId: item.ingredientId,
+        supplierId: item.supplierId,
+        quantity: Number(item.quantity),
+        unitPrice: parseCurrency(item.unitPrice),
+      }));
+      const invalidItem = items.some(
+        (item) =>
+          !item.ingredientId ||
+          !item.supplierId ||
+          !Number.isFinite(item.quantity) ||
+          item.quantity <= 0 ||
+          !Number.isFinite(item.unitPrice) ||
+          item.unitPrice < 0,
+      );
+
+      if (items.length === 0 || invalidItem) {
+        toast("ໃສ່ລາຍການ, ຈຳນວນ, ລາຄາ ແລະ ຜູ້ສະໜອງ", "error");
+        return false;
+      }
+
+      await apiClient.supplyOrders.createList({ staffId, items });
+      const [orders, orderDetails] = await Promise.all([
+        apiClient.supplyOrders.getAll(),
+        apiClient.supplyOrderDetails.getAll(),
+      ]);
+      setSupplyOrders(orders);
+      setSupplyOrderDetails(orderDetails);
+      toast("ບັນທຶກຮ່າງສັ່ງຊື້ແລ້ວ: ລໍຖ້າກວດສິນຄ້າ", "success");
+      return true;
+    } catch (err) {
+      console.error("Purchase draft save failed", err);
+      const apiError = getApiErrorInfo(err);
+
+      if (apiError.status === 401) {
+        toast("Login expired. Please log in again.", "error");
+        logout();
+        return false;
+      }
+
+      if (apiError.status === 403) {
+        toast("Admin only. Log in as admin to confirm.", "error");
+        return false;
+      }
+
+      toast(apiError.message || "ຜິດພາດ", "error");
+      return false;
+    }
+  };
+
   const submitStock = async () => {
     if (!modal?.data) return;
     const data = modal.data;
@@ -1501,7 +1567,7 @@ export default function App() {
         ]);
         setSupplyOrders(orders);
         setSupplyOrderDetails(orderDetails);
-        toast("ຢືນຢັນລາຍການແລ້ວ: ລໍຖ້າຮັບເຂົ້າ", "success");
+        toast("ບັນທຶກລາຍການສັ່ງຊື້ແລ້ວ: ລໍຖ້າກວດສິນຄ້າ", "success");
         setModal(null);
         return;
       }
@@ -2375,6 +2441,7 @@ export default function App() {
               stockFilter={stockFilter}
               setStockFilter={setStockFilter}
               setModal={setModal}
+              savePurchaseDraft={savePurchaseDraft}
               deleteStock={deleteStock}
             />
           )}

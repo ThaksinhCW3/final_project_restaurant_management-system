@@ -2,12 +2,25 @@ import { CalendarDays, Check, Download, ExternalLink, Plus, Pencil, Printer, Rot
 import { useState } from "react";
 import type { CSSProperties, Dispatch, SetStateAction } from "react";
 import { Btn, Modal } from "../components/SharedUI";
-import { BILL_URL, C, kip } from "../config/constants";
+import { BILL_URL, C, formatCurrencyInput, kip, parseCurrency } from "../config/constants";
 import type { AppModalState } from "../types/app";
 import type { IngredientItem, MenuItem, RecipeItem, SaleItem, SessionItem, StaffItem, StockItem, SupplierItem, SupplyOrderDetailItem, SupplyOrderItem } from "../types";
 import { printOrderBill } from "../utils/printOrderBill";
 
 type DispatchModal = Dispatch<SetStateAction<AppModalState>>;
+type PurchaseDraft = {
+  qty: string;
+  minQty: number;
+  suggestedQty: number;
+  unitPrice: string;
+  supplierId: number | "";
+};
+type PurchaseDraftSubmitItem = {
+  ingredientId: number | string;
+  supplierId: number | string;
+  quantity: number | string;
+  unitPrice: number | string;
+};
 
 const staffRoleLabel = (role: string) => (role === "manager" ? "ຜູ້ຈັດການ" : "ພະນັກງານ");
 const sessionTypeLabel = (value?: string | null) => {
@@ -326,6 +339,7 @@ export function StockView({
   stockFilter,
   setStockFilter,
   setModal,
+  savePurchaseDraft,
   deleteStock,
 }: {
   stock: StockItem[];
@@ -335,15 +349,127 @@ export function StockView({
   stockFilter: string;
   setStockFilter: (value: string) => void;
   setModal: DispatchModal;
+  savePurchaseDraft: (items: PurchaseDraftSubmitItem[]) => Promise<boolean>;
   deleteStock: (id: number, name: string) => void;
 }) {
   const [showPendingImports, setShowPendingImports] = useState(false);
+  const [showPurchaseHistory, setShowPurchaseHistory] = useState(false);
+  const [purchaseStep, setPurchaseStep] = useState<"inventory" | "select" | "review">("inventory");
+  const [selectedPurchaseIds, setSelectedPurchaseIds] = useState<number[]>([]);
+  const [purchaseDrafts, setPurchaseDrafts] = useState<Record<number, PurchaseDraft>>({});
   const visibleStock = stock.filter((r) => stockFilter === "all" || r.cur <= r.min);
+  const purchaseStockItems = [...stock].sort((a, b) => {
+    const aLow = a.cur <= a.min;
+    const bLow = b.cur <= b.min;
+    if (aLow !== bLow) return aLow ? -1 : 1;
+    return (a.cur - a.min) - (b.cur - b.min);
+  });
   const lowStockCount = stock.filter((r) => r.cur <= r.min).length;
-  const firstStock = stock[0];
   const pendingSupplyOrders = supplyOrders.filter(
     (order) => order.status === "pending" || order.status === "waiting_stock",
   );
+  const pastSupplyOrders = supplyOrders.filter(
+    (order) => order.status !== "pending" && order.status !== "waiting_stock",
+  );
+  const selectedPurchaseItems = purchaseStockItems.filter((item) => selectedPurchaseIds.includes(item.id));
+  const recommendedOrderQty = (item: StockItem) => Math.max(1, Math.ceil(item.cur < item.min ? item.min - item.cur : 1));
+  const createPurchaseDraft = (item: StockItem): PurchaseDraft => {
+    const suggestedQty = recommendedOrderQty(item);
+    return {
+      qty: String(suggestedQty),
+      minQty: 0,
+      suggestedQty,
+      unitPrice: item.costPerUnit ? item.costPerUnit.toLocaleString("en-US") : "",
+      supplierId: item.supplierId ?? "",
+    };
+  };
+  const getPurchaseDraft = (item: StockItem) => purchaseDrafts[item.id] ?? createPurchaseDraft(item);
+  const purchaseQtyFor = (item: StockItem) => {
+    const draft = getPurchaseDraft(item);
+    return Math.max(0, Number(draft.qty) || 0);
+  };
+  const purchaseLineTotal = (item: StockItem) => purchaseQtyFor(item) * parseCurrency(getPurchaseDraft(item).unitPrice);
+  const updatePurchaseDraft = (item: StockItem, field: keyof PurchaseDraft, value: string | number) => {
+    setPurchaseDrafts((current) => {
+      const existing = current[item.id] ?? createPurchaseDraft(item);
+      const next = { ...existing, [field]: value };
+      if (field === "qty") {
+        next.qty = String(Math.max(0, Number(value) || 0));
+      }
+      if (field === "unitPrice") {
+        next.unitPrice = formatCurrencyInput(value);
+      }
+      return { ...current, [item.id]: next };
+    });
+  };
+  const togglePurchaseItem = (item: StockItem) => {
+    const selected = selectedPurchaseIds.includes(item.id);
+    setSelectedPurchaseIds((current) =>
+      selected ? current.filter((itemId) => itemId !== item.id) : [...current, item.id],
+    );
+    setPurchaseDrafts((current) => {
+      const next = { ...current };
+      if (selected) {
+        delete next[item.id];
+      } else {
+        next[item.id] = next[item.id] ?? createPurchaseDraft(item);
+      }
+      return next;
+    });
+  };
+  const startPurchaseFlow = () => {
+    setStockFilter("all");
+    setPurchaseStep("select");
+  };
+  const resetPurchaseFlow = () => {
+    setPurchaseStep("inventory");
+    setSelectedPurchaseIds([]);
+    setPurchaseDrafts({});
+  };
+  const supplierNameFor = (item: StockItem) => {
+    const supplierId = getPurchaseDraft(item).supplierId || item.supplierId;
+    return suppliers.find((supplier) => supplier.id === supplierId)?.name || item.supplierName || "ບໍ່ມີຜູ້ສະໜອງ";
+  };
+  const supplierPhoneFor = (item: StockItem) => {
+    const supplierId = getPurchaseDraft(item).supplierId || item.supplierId;
+    return suppliers.find((supplier) => supplier.id === supplierId)?.phone;
+  };
+  const purchaseBillGroups = selectedPurchaseItems.reduce<
+    { key: string; supplierName: string; supplierPhone?: string | null; items: StockItem[]; total: number }[]
+  >((groups, item) => {
+    const supplierId = getPurchaseDraft(item).supplierId || item.supplierId;
+    const key = supplierId ? String(supplierId) : "no-supplier";
+    let group = groups.find((entry) => entry.key === key);
+    if (!group) {
+      group = {
+        key,
+        supplierName: supplierNameFor(item),
+        supplierPhone: supplierPhoneFor(item),
+        items: [],
+        total: 0,
+      };
+      groups.push(group);
+    }
+    group.items.push(item);
+    group.total += purchaseLineTotal(item);
+    return groups;
+  }, []);
+  const saveDraftPurchaseOrders = async () => {
+    const items = selectedPurchaseItems
+      .map((item) => ({
+        ingredientId: item.id,
+        supplierId: getPurchaseDraft(item).supplierId,
+        quantity: purchaseQtyFor(item),
+        unitPrice: getPurchaseDraft(item).unitPrice,
+      }))
+      .filter((item) => Number(item.quantity) > 0);
+
+    const saved = await savePurchaseDraft(items);
+    if (saved) {
+      resetPurchaseFlow();
+      setShowPendingImports(true);
+    }
+  };
   const openReceiveOrder = (order: SupplyOrderItem) => {
     const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
     setShowPendingImports(false);
@@ -398,6 +524,25 @@ export function StockView({
     borderRadius: "50%",
     background: color,
   });
+  const supplyOrderStatusLabel = (status: string) => {
+    if (status === "completed") return "ສຳເລັດ";
+    if (status === "cancelled") return "ຍົກເລີກ";
+    if (status === "pending" || status === "waiting_stock") return "ລໍຖ້າກວດ";
+    return status;
+  };
+  const purchaseInputStyle: CSSProperties = {
+    width: "100%",
+    minWidth: 0,
+    boxSizing: "border-box",
+    background: C.card2,
+    border: `1px solid ${C.border}`,
+    borderRadius: 8,
+    padding: "8px 9px",
+    color: C.text,
+    fontSize: 12,
+    outline: "none",
+    fontFamily: "var(--sans)",
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -429,6 +574,12 @@ export function StockView({
           </Btn>
           <Btn
             variant="secondary"
+            onClick={() => setShowPurchaseHistory(true)}
+          >
+            <CalendarDays size={14} /> ເບິ່ງລາຍການສັ່ງຊື້ທີ່ຜ່ານມາ
+          </Btn>
+          <Btn
+            variant="secondary"
             onClick={() =>
               setModal({
                 type: "supplier-manager",
@@ -441,27 +592,9 @@ export function StockView({
           </Btn>
           <Btn
             variant="secondary"
-            onClick={() =>
-              setModal({
-                type: "stock-receive",
-                title: "ຮັບເຂົ້າ",
-                data: {
-                  mode: "create",
-                  items: [
-                    {
-                      ingredientId: firstStock?.id ?? "",
-                      qty: "",
-                      unitPrice: firstStock?.costPerUnit
-                        ? firstStock.costPerUnit.toLocaleString("en-US")
-                        : "",
-                      supplierId: firstStock?.supplierId ?? suppliers[0]?.id ?? "",
-                    },
-                  ],
-                },
-              })
-            }
+            onClick={startPurchaseFlow}
           >
-            <Truck size={14} /> ຮັບເຂົ້າ
+            <Truck size={14} /> ສັ່ງຊື້
           </Btn>
           <Btn
             onClick={() =>
@@ -510,37 +643,212 @@ export function StockView({
           </div>
         </Modal>
       )}
-      <>
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflowX: "auto", overflowY: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "64px 1fr 80px 70px 80px 120px 140px 1fr", padding: "14px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase", minWidth: 940 }}>
-          <span>ຮູບ</span><span>ສິນຄ້າ</span><span>ຈຳນວນ</span><span>ຫົວໜ່ວຍ</span><span>ຕ່ຳສຸດ</span><span>ຕົ້ນທຶນ</span><span>ຜູ້ສະໜອງ</span><span>ການຈັດການ</span>
-        </div>
-        {visibleStock.map((r) => {
-          const low = r.cur <= r.min;
-          return (
-            <div key={r.id} style={{ display: "grid", gridTemplateColumns: "64px 1fr 80px 70px 80px 120px 140px 1fr", padding: "14px 16px", borderTop: `1px solid ${C.border}`, alignItems: "center", gap: 10, minWidth: 940 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.border}`, background: C.card2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {r.image ? (
-                  <img src={r.image} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                ) : (
-                  <ImageIcon size={16} color={C.textDim} />
-                )}
+      {showPurchaseHistory && (
+        <Modal title="ເບິ່ງລາຍການສັ່ງຊື້ທີ່ຜ່ານມາ" onClose={() => setShowPurchaseHistory(false)} width={900}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {pastSupplyOrders.map((order) => {
+              const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
+              return (
+                <div
+                  key={order.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "80px minmax(160px,1fr) minmax(220px,2fr) 120px 110px",
+                    gap: 12,
+                    alignItems: "center",
+                    padding: "14px 16px",
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 12,
+                    minWidth: 820,
+                  }}
+                >
+                  <strong style={{ color: C.text }}>#{order.id}</strong>
+                  <div>
+                    <div style={{ color: C.text, fontWeight: 800 }}>{order.supplierName}</div>
+                    <div style={{ color: C.textDim, fontSize: 11 }}>{order.orderDate}</div>
+                  </div>
+                  <span style={{ color: C.textDim, fontSize: 12 }}>
+                    {details.map((detail) => {
+                      const received = detail.receivedQuantity ?? detail.quantity;
+                      return `${detail.ingredientName} ${received}`;
+                    }).join(", ") || "—"}
+                  </span>
+                  <strong style={{ color: C.red }}>{kip(order.totalAmount)}</strong>
+                  <span style={{ color: C.green, fontSize: 12, fontWeight: 800, textAlign: "right" }}>
+                    {supplyOrderStatusLabel(order.status)}
+                  </span>
+                </div>
+              );
+            })}
+            {pastSupplyOrders.length === 0 && (
+              <div style={{ color: C.textDim, border: `1px dashed ${C.borderMid}`, borderRadius: 12, padding: 18 }}>
+                ຍັງບໍ່ມີລາຍການສັ່ງຊື້ທີ່ຜ່ານມາ
               </div>
-              <span style={{ fontSize: 13, color: C.text }}>{r.name}</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: low ? C.red : C.text }}>{r.cur}</span>
-              <span style={{ fontSize: 12, color: C.textDim }}>{r.unit}</span>
-              <span style={{ fontSize: 12, color: C.textDim }}>{r.min}</span>
-              <span style={{ fontSize: 12, color: C.textDim }}>{kip(r.costPerUnit ?? 0)}</span>
-              <span style={{ fontSize: 12, color: C.textDim }}>{r.supplierName || "—"}</span>
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => setModal({ type: "stock-form", title: "ແກ້ໄຂສິນຄ້າ", data: { ...r, image: r.image ?? "", cur: String(r.cur), min: String(r.min), costPerUnit: r.costPerUnit ? r.costPerUnit.toLocaleString("en-US") : "", supplierId: r.supplierId ?? "" } })} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>ແກ້ໄຂ</button>
-                <button onClick={() => deleteStock(r.id, r.name)} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid rgba(208,64,48,0.3)`, background: "rgba(208,64,48,0.08)", cursor: "pointer", color: C.red }}>ລຶບ</button>
-              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+      {purchaseStep === "select" && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, padding: 16, display: "grid", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ color: C.text, fontSize: 15, fontWeight: 800 }}>ເລືອກສິນຄ້າສັ່ງຊື້</div>
+              <div style={{ color: C.textDim, fontSize: 12 }}>ສິນຄ້າຕ່ຳຈະຢູ່ຂ້າງເທິງ · {selectedPurchaseItems.length} ລາຍການຖືກເລືອກ</div>
             </div>
-          );
-        })}
+            <Btn variant="secondary" onClick={resetPurchaseFlow}>ຍົກເລີກ</Btn>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 12 }}>
+            {purchaseStockItems.map((item) => {
+              const selected = selectedPurchaseIds.includes(item.id);
+              return (
+                <div key={item.id} style={{ border: `1px solid ${selected ? "rgba(90,90,90,0.32)" : C.border}`, borderRadius: 12, padding: 14, background: selected ? C.card2 : "#fff", display: "grid", gap: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <div>
+                      <div style={{ color: C.text, fontWeight: 800, fontSize: 14 }}>{item.name}</div>
+                      <div style={{ color: C.textDim, fontSize: 12 }}>{supplierNameFor(item)}</div>
+                    </div>
+                    <strong style={{ color: C.red, whiteSpace: "nowrap" }}>{item.cur} / {item.min}</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, color: C.textDim, fontSize: 12 }}>
+                    <span>{item.unit}</span>
+                    <span>{kip(item.costPerUnit ?? 0)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => togglePurchaseItem(item)}
+                    style={{
+                      width: "100%",
+                      border: `1px solid ${selected ? "rgba(90,90,90,0.30)" : "rgba(183,28,28,0.24)"}`,
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      background: selected ? "#e7e1e1" : C.red,
+                      color: selected ? C.textDim : "#fff",
+                      cursor: "pointer",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {selected ? "ເລືອກແລ້ວ" : "ເລືອກ"}
+                  </button>
+                </div>
+              );
+            })}
+            {purchaseStockItems.length === 0 && (
+              <div style={{ color: C.textDim, border: `1px dashed ${C.borderMid}`, borderRadius: 12, padding: 18 }}>
+                ບໍ່ມີສິນຄ້າໃນຄັງ
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", position: "sticky", bottom: 12 }}>
+            <Btn
+              onClick={() => setPurchaseStep("review")}
+              disabled={selectedPurchaseItems.length === 0}
+              style={selectedPurchaseItems.length === 0 ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
+            >
+              ຖັດໄປ
+            </Btn>
+          </div>
         </div>
-      </>
+      )}
+      {purchaseStep === "review" ? (
+        <div style={{ display: "grid", gap: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ color: C.textMid, fontSize: 13 }}>ຮ່າງສັ່ງຊື້</div>
+              <div style={{ color: C.text, fontSize: 20, fontWeight: 900 }}>ໃບຮ່າງສັ່ງຊື້ຕາມຜູ້ສະໜອງ</div>
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <Btn variant="secondary" onClick={() => setPurchaseStep("select")}>ກັບຄືນ</Btn>
+              <Btn onClick={saveDraftPurchaseOrders} disabled={selectedPurchaseItems.length === 0}>
+                ບັນທຶກຮ່າງສັ່ງຊື້
+              </Btn>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 14 }}>
+            {purchaseBillGroups.map((group) => (
+              <div key={group.key} style={{ background: "#fffdf8", border: "1px solid rgba(58,120,184,0.28)", borderRadius: 8, padding: 16, boxShadow: "0 14px 30px rgba(35,10,10,0.06)", color: C.text }}>
+                <div style={{ textAlign: "center", color: C.blue, fontSize: 22, fontWeight: 900, marginBottom: 4 }}>ໃບຮ່າງສັ່ງຊື້</div>
+                <div style={{ textAlign: "center", color: C.textDim, fontSize: 12, marginBottom: 12 }}>DRAFT PURCHASE ORDER</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, fontSize: 12, color: C.textDim, marginBottom: 12 }}>
+                  <span>ຜູ້ສະໜອງ: <strong style={{ color: C.text }}>{group.supplierName}</strong></span>
+                  <span>ວັນທີ: {new Date().toLocaleDateString()}</span>
+                  {group.supplierPhone && <span>ໂທ: {group.supplierPhone}</span>}
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <div style={{ minWidth: 620 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "42px minmax(150px,1fr) 126px 126px 108px", gap: 8, padding: "8px 0", borderTop: `1px solid ${C.blue}`, borderBottom: `1px solid ${C.blue}`, color: C.blue, fontSize: 12, fontWeight: 800 }}>
+                      <span>No.</span>
+                      <span>ລາຍການ</span>
+                      <span>ຈຳນວນ</span>
+                      <span>ລາຄາ</span>
+                      <span style={{ textAlign: "right" }}>ລວມ</span>
+                    </div>
+                    {group.items.map((item, index) => {
+                      const draft = getPurchaseDraft(item);
+                      return (
+                        <div key={item.id} style={{ display: "grid", gridTemplateColumns: "42px minmax(150px,1fr) 126px 126px 108px", gap: 8, minHeight: 48, alignItems: "center", borderBottom: "1px solid rgba(58,120,184,0.20)", fontSize: 13 }}>
+                          <span style={{ color: C.textDim }}>{index + 1}</span>
+                          <div>
+                            <div style={{ fontWeight: 700 }}>{item.name}</div>
+                            <div style={{ color: C.textDim, fontSize: 11 }}>ແນະນຳ {draft.suggestedQty} {item.unit}</div>
+                          </div>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={draft.qty}
+                            onChange={(e) => updatePurchaseDraft(item, "qty", e.target.value)}
+                            style={purchaseInputStyle}
+                          />
+                          <input
+                            value={draft.unitPrice}
+                            onChange={(e) => updatePurchaseDraft(item, "unitPrice", e.target.value)}
+                            style={purchaseInputStyle}
+                          />
+                          <strong style={{ textAlign: "right", color: C.gold }}>{kip(purchaseLineTotal(item))}</strong>
+                        </div>
+                      );
+                    })}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, paddingTop: 12 }}>
+                      <span style={{ color: C.textDim, fontWeight: 800 }}>TOTAL</span>
+                      <strong style={{ color: C.gold, minWidth: 120, textAlign: "right" }}>{kip(group.total)}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflowX: "auto", overflowY: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "64px 1fr 80px 70px 80px 120px 140px 1fr", padding: "14px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase", minWidth: 940 }}>
+            <span>ຮູບ</span><span>ສິນຄ້າ</span><span>ຈຳນວນ</span><span>ຫົວໜ່ວຍ</span><span>ຕ່ຳສຸດ</span><span>ຕົ້ນທຶນ</span><span>ຜູ້ສະໜອງ</span><span>ການຈັດການ</span>
+          </div>
+          {visibleStock.map((r) => {
+            const low = r.cur <= r.min;
+            return (
+              <div key={r.id} style={{ display: "grid", gridTemplateColumns: "64px 1fr 80px 70px 80px 120px 140px 1fr", padding: "14px 16px", borderTop: `1px solid ${C.border}`, alignItems: "center", gap: 10, minWidth: 940 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.border}`, background: C.card2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {r.image ? (
+                    <img src={r.image} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  ) : (
+                    <ImageIcon size={16} color={C.textDim} />
+                  )}
+                </div>
+                <span style={{ fontSize: 13, color: C.text }}>{r.name}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: low ? C.red : C.text }}>{r.cur}</span>
+                <span style={{ fontSize: 12, color: C.textDim }}>{r.unit}</span>
+                <span style={{ fontSize: 12, color: C.textDim }}>{r.min}</span>
+                <span style={{ fontSize: 12, color: C.textDim }}>{kip(r.costPerUnit ?? 0)}</span>
+                <span style={{ fontSize: 12, color: C.textDim }}>{r.supplierName || "—"}</span>
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <button onClick={() => setModal({ type: "stock-form", title: "ແກ້ໄຂສິນຄ້າ", data: { ...r, image: r.image ?? "", cur: String(r.cur), min: String(r.min), costPerUnit: r.costPerUnit ? r.costPerUnit.toLocaleString("en-US") : "", supplierId: r.supplierId ?? "" } })} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>ແກ້ໄຂ</button>
+                  <button onClick={() => deleteStock(r.id, r.name)} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid rgba(208,64,48,0.3)`, background: "rgba(208,64,48,0.08)", cursor: "pointer", color: C.red }}>ລຶບ</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
