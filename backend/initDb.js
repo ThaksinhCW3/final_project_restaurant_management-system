@@ -135,10 +135,10 @@ const createTables = async (db) => {
   await db.query(`
     CREATE TABLE IF NOT EXISTS tables (
       table_id INT AUTO_INCREMENT PRIMARY KEY,
+      table_name VARCHAR(50),
       table_number INT NOT NULL UNIQUE,
       capacity INT DEFAULT 4,
-      status VARCHAR(30) DEFAULT 'available',
-      zone VARCHAR(50)
+      status VARCHAR(30) DEFAULT 'available'
     )
   `);
 
@@ -332,18 +332,18 @@ const seedData = async (db) => {
   `);
 
   await seedIfEmpty(db, "tables", `
-    INSERT INTO tables (table_id, table_number, capacity, status, zone) VALUES
-      (1, 1, 4, 'occupied', 'main'),
-      (2, 2, 4, 'occupied', 'main'),
-      (3, 3, 4, 'occupied', 'main'),
-      (4, 4, 4, 'available', 'main'),
-      (5, 5, 4, 'available', 'main'),
-      (6, 6, 4, 'available', 'main'),
-      (7, 7, 5, 'available', 'main'),
-      (8, 8, 4, 'available', 'main'),
-      (9, 9, 4, 'available', 'main'),
-      (10, 10, 4, 'available', 'main'),
-      (11, 11, 4, 'available', 'main')
+    INSERT INTO tables (table_id, table_name, table_number, capacity, status) VALUES
+      (1, 'Table 1', 1, 4, 'occupied'),
+      (2, 'Table 2', 2, 4, 'occupied'),
+      (3, 'Table 3', 3, 4, 'occupied'),
+      (4, 'Table 4', 4, 4, 'available'),
+      (5, 'Table 5', 5, 4, 'available'),
+      (6, 'Table 6', 6, 4, 'available'),
+      (7, 'Table 7', 7, 5, 'available'),
+      (8, 'Table 8', 8, 4, 'available'),
+      (9, 'Table 9', 9, 4, 'available'),
+      (10, 'Table 10', 10, 4, 'available'),
+      (11, 'Table 11', 11, 4, 'available')
   `);
 
   await seedIfEmpty(db, "service_sessions", `

@@ -49,7 +49,7 @@ interface POSProps {
   showAddItems: boolean;
   setShowAddItems: (show: boolean) => void;
   createBill: () => void;
-  createTable: (data: { tableNumber: string; seats: string; zone?: string }) => Promise<void>;
+  createTable: (data: { tableNumber: string; seats: string; tableName?: string }) => Promise<void>;
   deleteTable: (id: number) => void | Promise<void>;
   showQr: (session: SessionItem) => void;
   addItem: (sessionId: string, menuId: number, quantity?: number, note?: string) => void | Promise<void>;
@@ -85,7 +85,7 @@ export default function POS({
   cancelSession,
 }: POSProps) {
   const nextTableNumber = tables.length > 0 ? Math.max(...tables.map(table => table.id)) + 1 : 1;
-  const [tableForm, setTableForm] = useState({ tableNumber: String(nextTableNumber), seats: "4", zone: "" });
+  const [tableForm, setTableForm] = useState({ tableNumber: String(nextTableNumber), seats: "4", tableName: "" });
   const [showTableForm, setShowTableForm] = useState(false);
   const [savingTable, setSavingTable] = useState(false);
   const [billPanelOpen, setBillPanelOpen] = useState(true);
@@ -256,7 +256,11 @@ export default function POS({
     try {
       await createTable(tableForm);
       const next = Number(tableForm.tableNumber) + 1;
-      setTableForm({ tableNumber: Number.isFinite(next) ? String(next) : String(nextTableNumber), seats: tableForm.seats || "4", zone: "" });
+      setTableForm({
+        tableNumber: Number.isFinite(next) ? String(next) : String(nextTableNumber),
+        seats: tableForm.seats || "4",
+        tableName: "",
+      });
       setShowTableForm(false);
     } finally {
       setSavingTable(false);
@@ -290,14 +294,6 @@ export default function POS({
             aria-pressed={tableEditMode}
           >
             <Pencil size={13} /> {tableEditMode ? "ປິດແກ້ໄຂ" : "ແກ້ໄຂ"}
-          </button>
-          <button
-            onClick={() => setBillPanelOpen((open) => !open)}
-            className={`pos-toolbar-action ${billPanelOpen ? "is-active" : ""}`}
-            type="button"
-            aria-pressed={billPanelOpen}
-          >
-            <QrCode size={13} /> {billPanelOpen ? "ປິດບິນ" : "ເປີດບິນ"}
           </button>
           <button
             onClick={() => {
@@ -347,10 +343,10 @@ export default function POS({
               />
             </label>
             <label style={{ display: "grid", gap: 6, fontSize: 10, color: C.textMid, textTransform: "uppercase", letterSpacing: 1.1 }}>
-              ໂຊນ
+              ຊື່ໂຕະ
               <input
-                value={tableForm.zone}
-                onChange={(event) => setTableForm((prev) => ({ ...prev, zone: event.target.value }))}
+                value={tableForm.tableName}
+                onChange={(event) => setTableForm((prev) => ({ ...prev, tableName: event.target.value }))}
                 placeholder="ບໍ່ບັງຄັບ"
                 style={{ width: "100%", boxSizing: "border-box", background: C.card2, border: `1px solid ${C.border}`, borderRadius: 9, padding: "9px 12px", color: C.text, fontSize: 13, outline: "none" }}
               />

@@ -1,4 +1,4 @@
-import { CalendarDays, Check, Download, ExternalLink, Plus, Pencil, Printer, RotateCcw, Trash2, Truck, Image as ImageIcon } from "lucide-react";
+import { CalendarDays, Check, Download, ExternalLink, Plus, Pencil, Printer, RotateCcw, Trash2, Truck, X, Image as ImageIcon } from "lucide-react";
 import { useState } from "react";
 import type { CSSProperties, Dispatch, SetStateAction } from "react";
 import { Btn, Modal } from "../components/SharedUI";
@@ -610,38 +610,77 @@ export function StockView({
         </div>
       </div>
       {showPendingImports && (
-        <Modal title="ລາຍການລໍຖ້າກວດຮັບ" onClose={() => setShowPendingImports(false)} width={820}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {pendingSupplyOrders.map((order) => {
-            const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
-            return (
-              <div
-                key={order.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "90px minmax(160px,1fr) minmax(180px,2fr) 130px 120px",
-                  gap: 12,
-                  alignItems: "center",
-                  padding: "14px 16px",
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 12,
-                  minWidth: 760,
-                }}
+        <div
+          className="pending-import-backdrop"
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setShowPendingImports(false);
+          }}
+        >
+          <section className="pending-import-modal" role="dialog" aria-modal="true" aria-labelledby="pending-import-title">
+            <header className="pending-import-modal__header">
+              <h2 id="pending-import-title">ລາຍການສິນຄ້າລໍຖ້າກວດຮັບ</h2>
+              <button
+                type="button"
+                className="pending-import-modal__close"
+                onClick={() => setShowPendingImports(false)}
+                aria-label="ປິດ"
               >
-                <strong style={{ color: C.text }}>#{order.id}</strong>
-                <span style={{ color: C.text }}>{order.supplierName}</span>
-                <span style={{ color: C.textDim, fontSize: 12 }}>
-                  {details.map((detail) => `${detail.ingredientName} ${detail.quantity}`).join(", ") || "—"}
-                </span>
-                <strong style={{ color: C.red }}>{kip(order.totalAmount)}</strong>
-                <Btn onClick={() => openReceiveOrder(order)}>
-                  <Check size={14} /> ກວດຮັບ
-                </Btn>
+                <X size={28} />
+              </button>
+            </header>
+
+            <div className="pending-import-table-wrap">
+              <div className="pending-import-table">
+                <div className="pending-import-table__row pending-import-table__row--head">
+                  <span>ລຳດັບການນຳເຂົ້າ</span>
+                  <span>ຊື່ຜູ້ສະໜອງ</span>
+                  <span>ວັດຖຸດິບ</span>
+                  <span>ຈຳນວນ</span>
+                  <span>ຫົວໜ່ວຍ</span>
+                  <span>ວັນທີ</span>
+                  <span>ລາຄາ</span>
+                  <span aria-hidden="true" />
+                </div>
+
+                {pendingSupplyOrders.flatMap((order) => {
+                  const details = supplyOrderDetails.filter((detail) => detail.supplyOrderId === order.id);
+                  const rows = details.length > 0 ? details : [null];
+
+                  return rows.map((detail, detailIndex) => {
+                    const ingredient = detail
+                      ? stock.find((item) => item.id === detail.ingredientId)
+                      : null;
+                    const linePrice = detail
+                      ? detail.quantity * detail.unitPrice
+                      : order.totalAmount;
+
+                    return (
+                      <div className="pending-import-table__row" key={`${order.id}-${detail?.id ?? "empty"}`}>
+                        <strong data-label="ລຳດັບການນຳເຂົ້າ">#{order.id}</strong>
+                        <span data-label="ຊື່ຜູ້ສະໜອງ">{order.supplierName || "—"}</span>
+                        <span data-label="ວັດຖຸດິບ">{detail?.ingredientName || "—"}</span>
+                        <span data-label="ຈຳນວນ">{detail?.quantity ?? "—"}</span>
+                        <span data-label="ຫົວໜ່ວຍ">{ingredient?.unit || "—"}</span>
+                        <span data-label="ວັນທີ">{order.orderDate || "—"}</span>
+                        <strong className="pending-import-table__price" data-label="ລາຄາ">
+                          {kip(linePrice)}
+                        </strong>
+                        <div className="pending-import-table__action">
+                          {detailIndex === 0 && (
+                            <Btn onClick={() => openReceiveOrder(order)}>
+                              <Check size={15} /> ກວດຮັບ
+                            </Btn>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  });
+                })}
               </div>
-            );
-          })}
-          </div>
-        </Modal>
+            </div>
+          </section>
+        </div>
       )}
       {showPurchaseHistory && (
         <Modal title="ເບິ່ງລາຍການສັ່ງຊື້ທີ່ຜ່ານມາ" onClose={() => setShowPurchaseHistory(false)} width={900}>

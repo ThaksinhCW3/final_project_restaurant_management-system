@@ -330,8 +330,8 @@ export default function CustomerPage({
               <div className="customer-session-ended-icon">
                 <Receipt size={28} />
               </div>
-              <h1>Session not found</h1>
-              <p>Please scan QR to start ordering.</p>
+              <h1>ບໍ່ພົບຮອບການສັ່ງອາຫານ</h1>
+              <p>ກະລຸນາສະແກນ QR ເພື່ອເລີ່ມສັ່ງອາຫານ.</p>
             </div>
           </main>
         </div>

@@ -778,12 +778,12 @@ export default function App() {
     return nextTables;
   };
 
-  const createTable = async (data: { tableNumber: string; seats: string; zone?: string }) => {
+  const createTable = async (data: { tableNumber: string; seats: string; tableName?: string }) => {
     try {
       await apiClient.tables.create({
         tableNumber: data.tableNumber,
         seats: data.seats,
-        zone: data.zone ?? null,
+        tableName: data.tableName ?? null,
       });
       await refreshTables();
       toast(`ສ້າງໂຕະ ${data.tableNumber} ສຳເລັດ`, "success");

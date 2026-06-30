@@ -172,6 +172,7 @@ type RecipeRow = {
 type TableRow = {
   id: number;
   name: string;
+  table_name?: string | null;
   seats: number | string;
   status: string;
   since: string | null;
@@ -182,7 +183,7 @@ type TableRow = {
 type TableCreateInput = {
   tableNumber: number | string;
   seats: number | string;
-  zone?: string | null;
+  tableName?: string | null;
 };
 
 type OrderRow = {
@@ -920,7 +921,7 @@ export const apiClient = {
 
       return tablesRes.data.map(row => ({
         id: row.id,
-        name: row.name === "Table" ? `Table ${row.id}` : row.name,
+        name: row.table_name?.trim() || row.name || `Table ${row.id}`,
         seats: toNumber(row.seats, 4),
         status: normalizeTableStatus(row.status),
         items: orderItemsBySession.get(row.sessionId ?? row.session_id ?? -1) ?? [],
@@ -931,7 +932,7 @@ export const apiClient = {
     create: (data: TableCreateInput) => API.post("/tables", {
       table_number: Number(data.tableNumber),
       capacity: Number(data.seats),
-      zone: data.zone ?? null,
+      table_name: data.tableName?.trim() || null,
     }),
     update: (id: number, data: Partial<TableItem>) => API.put(`/tables/${id}`, {
       status: data.status === "free" ? "Completed" : "Active",

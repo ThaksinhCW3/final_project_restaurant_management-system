@@ -44,19 +44,17 @@ export default function StockReceiveModal({
   const items: any[] = modal.data.items ?? [];
 
   const setItems = (nextItems: any[]) => setField("items", nextItems);
-  const firstStock = stock[0];
   const addCreateRow = () => {
-    const ingredient = firstStock;
     setItems([
       ...items,
       {
-        ingredientId: ingredient?.id ?? "",
-        ingredientName: ingredient?.name ?? "",
-        unit: ingredient?.unit ?? "",
+        ingredientId: "",
+        ingredientName: "",
+        unit: "",
         qty: "",
         minQty: 0,
-        unitPrice: ingredient?.costPerUnit ? ingredient.costPerUnit.toLocaleString("en-US") : "",
-        supplierId: ingredient?.supplierId ?? suppliers[0]?.id ?? "",
+        unitPrice: "",
+        supplierId: "",
         locked: false,
       },
     ]);

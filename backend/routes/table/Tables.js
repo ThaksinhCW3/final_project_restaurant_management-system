@@ -7,7 +7,8 @@ module.exports = (pool) => {
         const query = `
             SELECT
                 tables.table_number AS id,
-                CONCAT('Table ', tables.table_number) AS name,
+                tables.table_name,
+                COALESCE(NULLIF(TRIM(tables.table_name), ''), CONCAT('Table ', tables.table_number)) AS name,
                 COALESCE(tables.capacity, 4) AS seats,
                 CASE
                     WHEN service_sessions.session_id IS NOT NULL THEN 'occupied'
@@ -34,7 +35,8 @@ module.exports = (pool) => {
         const query = `
             SELECT
                 tables.table_number AS id,
-                CONCAT('Table ', tables.table_number) AS name,
+                tables.table_name,
+                COALESCE(NULLIF(TRIM(tables.table_name), ''), CONCAT('Table ', tables.table_number)) AS name,
                 COALESCE(tables.capacity, 4) AS seats,
                 CASE
                     WHEN service_sessions.session_id IS NOT NULL THEN 'occupied'
@@ -62,7 +64,7 @@ module.exports = (pool) => {
     router.post('/', (req, res) => {
         const tableNumber = Number(req.body.table_number ?? req.body.tableNumber);
         const capacity = Number(req.body.capacity ?? req.body.seats ?? 4);
-        const zone = req.body.zone ?? null;
+        const tableName = String(req.body.table_name ?? req.body.tableName ?? '').trim() || null;
 
         if (!Number.isInteger(tableNumber) || tableNumber <= 0) {
             return res.status(400).json({ message: 'Valid table number is required' });
@@ -73,11 +75,11 @@ module.exports = (pool) => {
         }
 
         const query = `
-            INSERT INTO tables (table_number, capacity, status, zone)
-            VALUES (?, ?, 'available', ?)
+            INSERT INTO tables (table_number, table_name, capacity, status)
+            VALUES (?, ?, ?, 'available')
         `;
 
-        pool.query(query, [tableNumber, capacity, zone], (err) => {
+        pool.query(query, [tableNumber, tableName, capacity], (err) => {
             if (err) {
                 if (err.code === 'ER_DUP_ENTRY') {
                     return res.status(409).json({ message: 'Table number already exists' });
@@ -87,7 +89,8 @@ module.exports = (pool) => {
 
             res.status(201).json({
                 id: tableNumber,
-                name: `Table ${tableNumber}`,
+                table_name: tableName,
+                name: tableName || `Table ${tableNumber}`,
                 seats: capacity,
                 status: 'free',
                 items: [],
@@ -100,7 +103,8 @@ module.exports = (pool) => {
     // UPDATE table status
     router.put('/:id', (req, res) => {
         const { id } = req.params;
-        const { status, session_id, capacity, seats, zone } = req.body;
+        const { status, session_id, capacity, seats } = req.body;
+        const tableNameInput = req.body.table_name ?? req.body.tableName;
         const nextStatus = status === 'free' || status === 'Completed' ? 'available' : status === 'Active' ? 'occupied' : status;
         const nextCapacity = capacity ?? seats;
         const updates = [];
@@ -114,9 +118,9 @@ module.exports = (pool) => {
             updates.push('capacity = ?');
             params.push(Number(nextCapacity));
         }
-        if (zone !== undefined) {
-            updates.push('zone = ?');
-            params.push(zone);
+        if (tableNameInput !== undefined) {
+            updates.push('table_name = ?');
+            params.push(String(tableNameInput ?? '').trim() || null);
         }
 
         if (updates.length === 0) {

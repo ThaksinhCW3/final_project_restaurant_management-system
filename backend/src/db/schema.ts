@@ -168,10 +168,10 @@ export const sales = mysqlTable("sales", {
 
 export const tables = mysqlTable("tables", {
 	tableId: int("table_id").autoincrement().notNull(),
+	tableName: varchar("table_name", { length: 50 }),
 	tableNumber: int("table_number").notNull(),
 	capacity: int("capacity").default(4),
 	status: mysqlEnum("status", ['available','occupied','reserved','disabled']).default('available').notNull(),
-	zone: varchar("zone", { length: 50 }),
 },
 (table) => [
 	primaryKey({ columns: [table.tableId], name: "tables_table_id"}),
