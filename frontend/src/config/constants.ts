@@ -109,9 +109,32 @@ export const PAY_METHODS = [
   { id: "ບັດ", label: "ບັດ", emoji: "💳" },
 ];
 
+const getPublicOrigin = (): string => {
+  if (typeof window !== "undefined" && window.location.origin) {
+    return window.location.origin.replace(/\/$/, "");
+  }
+  return "http://localhost:5173";
+};
+
+export const PUBLIC_APP_URL = (() => {
+  const configured = (import.meta as any).env?.VITE_PUBLIC_APP_URL?.trim?.();
+  return (configured || getPublicOrigin()).replace(/\/$/, "");
+})();
+
+export const getCustomerBillId = (locationObj?: Pick<Location, "pathname" | "search">): string | null => {
+  const pathname = locationObj?.pathname ?? (typeof window !== "undefined" ? window.location.pathname : "");
+  const search = locationObj?.search ?? (typeof window !== "undefined" ? window.location.search : "");
+  const queryBill = new URLSearchParams(search).get("bill");
+  if (queryBill) return queryBill;
+
+  const customerPathMatch = pathname.match(/^\/customer\/([^/?#]+)/i);
+  if (customerPathMatch?.[1]) return decodeURIComponent(customerPathMatch[1]);
+
+  return null;
+};
+
 export const BILL_URL = (id: string): string => {
-  const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
-  return `${origin}/customer?bill=${encodeURIComponent(id)}`;
+  return `${PUBLIC_APP_URL}/?bill=${encodeURIComponent(id)}`;
 };
 
 export const QR_URL = (id: string): string => {

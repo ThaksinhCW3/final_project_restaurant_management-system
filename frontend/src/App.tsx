@@ -20,6 +20,7 @@ import {
   uid,
   kip,
   parseCurrency,
+  getCustomerBillId,
 } from "./config/constants";
 import { NavBtn } from "./components/SharedUI";
 import {
@@ -355,7 +356,7 @@ export default function App() {
   useEffect(() => {
     if (
       typeof window === "undefined" ||
-      (window.location.pathname !== "/customer" &&
+      (!window.location.pathname.toLowerCase().startsWith("/customer") &&
         !window.location.search.includes("bill="))
     ) {
       return;
@@ -411,7 +412,12 @@ export default function App() {
 
   useEffect(() => {
     if (!currentUser) return;
-    if (typeof window !== "undefined" && (window.location.pathname === "/customer" || window.location.search.includes("bill="))) return;
+    if (
+      typeof window !== "undefined" &&
+      (window.location.pathname.toLowerCase().startsWith("/customer") || window.location.search.includes("bill="))
+    ) {
+      return;
+    }
 
     const refreshOrderCache = async () => {
       const [nextSessions, nextTables] = await Promise.all([
@@ -2160,12 +2166,9 @@ export default function App() {
   document.title = `ລະບົບຈັດການຮ້ານໂອເລ້ - ${titles[view] ?? "Main"}`;
 }, [view]);
 
-  const billId =
-    typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search).get("bill")
-      : null;
+  const billId = getCustomerBillId();
   const isCustomerPage =
-    typeof window !== "undefined" && window.location.pathname === "/customer";
+    typeof window !== "undefined" && window.location.pathname.toLowerCase().startsWith("/customer");
   const customerSession = billId
     ? sessions.find((session) => session.id === billId)
     : null;
