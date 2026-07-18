@@ -137,6 +137,9 @@ const readStoredUser = (): AuthUser | null => {
 const roleLabel = (role?: string | null) =>
   role === "manager" ? "ຜູ້ຈັດການ" : "ພະນັກງານ";
 
+const orderLineKey = (menuId: number, note?: string | null) =>
+  `${menuId}:${String(note ?? "").trim()}`;
+
 const getApiErrorInfo = (err: unknown) => {
   const maybeError = err as {
     response?: {
@@ -185,6 +188,15 @@ export default function App() {
   const [sidebarHidden, setSidebarHidden] = useState<boolean>(false);
   const [modal, setModal] = useState<AppModalState>(null);
   const [paymentPrintPrompt, setPaymentPrintPrompt] = useState<SessionItem | null>(null);
+  const [doneOrderLines, setDoneOrderLines] = useState<Record<string, string[]>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const saved = window.localStorage.getItem("done-order-lines");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [loaded, setLoaded] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() =>
@@ -198,6 +210,38 @@ export default function App() {
   const submittedOrderSignatures = useRef(new Map<string, string>());
   const isAdmin = currentUser?.role === "manager";
   const canAccessView = (viewId: string) => isAdmin || !MANAGER_ONLY_VIEWS.has(viewId);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("done-order-lines", JSON.stringify(doneOrderLines));
+  }, [doneOrderLines]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== "done-order-lines") return;
+      try {
+        setDoneOrderLines(event.newValue ? JSON.parse(event.newValue) : {});
+      } catch {
+        setDoneOrderLines({});
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const toggleOrderLineDone = (sessionId: string, menuId: number, note?: string | null) => {
+    const key = orderLineKey(menuId, note);
+    setDoneOrderLines((current) => {
+      const lines = new Set(current[sessionId] ?? []);
+      if (lines.has(key)) {
+        lines.delete(key);
+      } else {
+        lines.add(key);
+      }
+      return { ...current, [sessionId]: Array.from(lines) };
+    });
+  };
 
   useEffect(() => {
     if (currentUser && !canAccessView(view)) {
@@ -1714,16 +1758,16 @@ export default function App() {
       ]);
       setSessions(nextSessions);
       setTables(nextTables);
-      toast(`ຢືນຢັນອໍເດີ ${id} ແລ້ວ`, "success");
+      toast(`ສຳເລັດອໍເດີ ${id} ແລ້ວ`, "success");
     } catch (err) {
-      console.error("Confirm order received failed", err);
+      console.error("Mark order done failed", err);
       const apiError = getApiErrorInfo(err);
       if (apiError.status === 401) {
         toast("Login expired. Please log in again.", "error");
         logout();
         return;
       }
-      toast(apiError.message || "ຢືນຢັນອໍເດີບໍ່ສຳເລັດ", "error");
+      toast(apiError.message || "ສຳເລັດອໍເດີບໍ່ໄດ້", "error");
     }
   };
 
@@ -2112,6 +2156,10 @@ export default function App() {
     staff: "ພະນັກ",
   };
 
+  useEffect(() => {
+  document.title = `ລະບົບຈັດການຮ້ານໂອເລ້ - ${titles[view] ?? "Main"}`;
+}, [view]);
+
   const billId =
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("bill")
@@ -2152,6 +2200,7 @@ export default function App() {
         submitOrder={submitCustomerOrder}
         requestPayment={requestPayment}
         requestCancellation={requestOrderCancellation}
+        doneOrderLines={doneOrderLines}
       />
     );
   }
@@ -2415,6 +2464,8 @@ export default function App() {
               updateItem={updateItem}
               requestPayment={requestPayment}
               confirmOrderReceived={setSessionOrderServed}
+              doneOrderLines={doneOrderLines}
+              toggleOrderLineDone={toggleOrderLineDone}
               decideOrderCancellation={decideOrderCancellation}
               confirmPayment={confirmPayment}
               cancelSession={cancelSession}

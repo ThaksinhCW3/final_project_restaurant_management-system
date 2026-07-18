@@ -513,8 +513,8 @@ export default function MenuFormModal({
                           )
                         }
                       >
-                        <option value="single">Single</option>
-                        <option value="multiple">Multiple</option>
+                        <option value="single">ເລືອກຢ່າງດຽວ</option>
+                        <option value="multiple">ເລືອກໄດ້ຫຼາຍ</option>
                       </select>
                       <label>
                         <input

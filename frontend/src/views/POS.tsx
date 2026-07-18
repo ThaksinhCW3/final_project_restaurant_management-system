@@ -1,9 +1,8 @@
 // src/views/POS.tsx
 import { useState, type FormEvent } from "react";
-import { Check, CreditCard, ExternalLink, Minus, Pencil, Plus, Printer, QrCode, Trash2, X } from "lucide-react";
+import { Check, CreditCard, ExternalLink, Minus, Pencil, Plus, QrCode, Trash2, X } from "lucide-react";
 import { BILL_URL, C, kip, parseCurrency } from "../config/constants";
 import type { MenuItem, MenuOptionGroup, MenuOptionValue, SessionItem, TableItem } from "../types";
-import { printOrderBill } from "../utils/printOrderBill";
 
 const sessionTotal = (session: SessionItem, menu: MenuItem[]): number =>
   session.items.reduce((sum, item) => {
@@ -57,6 +56,8 @@ interface POSProps {
   updateItem: (sessionId: string, menuId: number, previousNote: string, quantity: number, nextNote?: string) => void | Promise<void>;
   requestPayment: (sessionId: string) => void | Promise<void>;
   confirmOrderReceived: (sessionId: string) => void | Promise<void>;
+  doneOrderLines: Record<string, string[]>;
+  toggleOrderLineDone: (sessionId: string, menuId: number, note?: string | null) => void;
   decideOrderCancellation: (sessionId: string, decision: "approved" | "rejected") => void | Promise<void>;
   confirmPayment: (sessionId: string) => void | Promise<void>;
   cancelSession: (sessionId: string) => void;
@@ -80,6 +81,8 @@ export default function POS({
   updateItem,
   requestPayment,
   confirmOrderReceived,
+  doneOrderLines,
+  toggleOrderLineDone,
   decideOrderCancellation,
   confirmPayment,
   cancelSession,
@@ -96,6 +99,10 @@ export default function POS({
   const [addQty, setAddQty] = useState(1);
   const [addOptions, setAddOptions] = useState<SelectedOptions>({});
   const [addNote, setAddNote] = useState("");
+  const orderLineKey = (menuId: number, note?: string | null) =>
+    `${menuId}:${String(note ?? "").trim()}`;
+  const isOrderLineDone = (sessionId: string, menuId: number, note?: string | null) =>
+    (doneOrderLines[sessionId] ?? []).includes(orderLineKey(menuId, note));
   const selectedSession = selectedSessionId ? sessions.find(session => session.id === selectedSessionId) : null;
   const tableSessionId = (table: TableItem): string | null =>
     table.sessionId ? `B${String(table.sessionId).padStart(3, "0")}` : null;
@@ -427,8 +434,7 @@ export default function POS({
                 </div>
                 <div className="pos-bill-actions">
                   <button className="is-primary" onClick={() => showQr(selectedSession)}><QrCode size={13} /> QR</button>
-                  <button onClick={() => openCustomerView(selectedSession.id)}><ExternalLink size={13} /> ເບິ່ງ</button>
-                  <button onClick={() => printOrderBill(selectedSession, menu)}><Printer size={13} /> ພິມ</button>
+                  <button onClick={() => openCustomerView(selectedSession.id)}><ExternalLink size={13} /> ເບິ່ງໜ້າລູກຄ້າ</button>
                   <button className="is-close" onClick={() => { setSelectedSessionId(null); setShowAddItems(false); setBillPanelOpen(false); }}><X size={16} /></button>
                 </div>
               </div>
@@ -468,13 +474,14 @@ export default function POS({
               {selectedSession.items.map(item => {
                 const menuItem = menu.find(entry => entry.id === item.id);
                 if (!menuItem) return null;
+                const lineDone = isOrderLineDone(selectedSession.id, item.id, item.note);
 
                 return (
-                  <div key={`${item.id}-${item.note ?? ""}`} className="pos-bill-item">
+                  <div key={`${item.id}-${item.note ?? ""}`} className={`pos-bill-item ${lineDone ? "is-done" : ""}`}>
                     <button
                       type="button"
                       className="pos-bill-item-edit"
-                      disabled={selectedSession.cancellationStatus === "pending"}
+                      disabled={selectedSession.cancellationStatus === "pending" || lineDone}
                       onClick={() => openEditMenuDetail(menuItem, item)}
                     >
                       <div className="pos-bill-thumb">{renderMenuThumb(menuItem)}</div>
@@ -482,23 +489,38 @@ export default function POS({
                         <strong>{menuItem.name}</strong>
                         <small>{menuItem.cat}</small>
                         {item.note && <small className="pos-bill-item-note">ໝາຍເຫດ: {item.note}</small>}
+                        {selectedSession.orderStatus && (
+                          <small className={`pos-bill-item-status ${lineDone ? "is-ready" : "is-preparing"}`}>
+                            {lineDone ? "ສຳເລັດແລ້ວ" : "ກຳລັງກະກຽມ"}
+                          </small>
+                        )}
                         <span>{kip(menuItem.price * item.qty)}</span>
                       </div>
                     </button>
                     <div className="pos-bill-qty">
                       <button
-                        disabled={selectedSession.cancellationStatus === "pending"}
+                        disabled={selectedSession.cancellationStatus === "pending" || lineDone}
                         onClick={() => rmItem(selectedSession.id, item.id, item.note ?? "")}
                       >
                         <Minus size={13} />
                       </button>
                       <span>{item.qty}</span>
                       <button
-                        disabled={selectedSession.cancellationStatus === "pending"}
+                        disabled={selectedSession.cancellationStatus === "pending" || lineDone}
                         onClick={() => addItem(selectedSession.id, item.id, 1, item.note ?? "")}
                       >
                         <Plus size={13} />
                       </button>
+                      {selectedSession.orderStatus && selectedSession.orderStatus !== "ready" && (
+                        <button
+                          type="button"
+                          className={`pos-line-done-button ${lineDone ? "is-done" : ""}`}
+                          disabled={selectedSession.cancellationStatus === "pending"}
+                          onClick={() => toggleOrderLineDone(selectedSession.id, item.id, item.note)}
+                        >
+                          <Check size={13} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -518,7 +540,9 @@ export default function POS({
                 >
                   + ເພີ່ມລາຍການ
                 </button>
-                {selectedSession.status === "active" && selectedSession.orderStatus !== "ready" ? (
+                {selectedSession.status === "active" &&
+                selectedSession.orderStatus &&
+                selectedSession.orderStatus !== "ready" ? (
                   <button
                     className="pos-bill-pay is-confirm"
                     disabled={
@@ -527,7 +551,7 @@ export default function POS({
                     }
                     onClick={() => confirmOrderReceived(selectedSession.id)}
                   >
-                    <Check size={14} /> ໄດ້ຮັບແລ້ວ
+                    <Check size={14} /> ຢືນຍັນລາຍການ
                   </button>
                 ) : selectedSession.status === "active" ? (
                   <button
@@ -544,7 +568,7 @@ export default function POS({
                   <button className="pos-bill-pay is-confirm" onClick={() => confirmPayment(selectedSession.id)}>ຢືນຢັນ</button>
                 )}
               </div>
-              <button className="pos-bill-cancel" onClick={() => cancelSession(selectedSession.id)}>ຍົກເລີກ / ປິດໂດຍບໍ່ຊໍາລະ</button>
+              <button className="pos-bill-cancel" onClick={() => cancelSession(selectedSession.id)}>ຍົກເລີກລາຍການ</button>
             </div>
           </>
         ) : (

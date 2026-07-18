@@ -851,10 +851,12 @@ export const apiClient = {
     create: (data: SupplierCreateInput) => API.post("/suppliers", {
       supplier_name: data.supplier_name ?? data.name,
       phone: data.phone ?? "",
+      address: data.address ?? null,
     }),
     update: (id: number, data: SupplierCreateInput) => API.put(`/suppliers/${id}`, {
       supplier_name: data.supplier_name ?? data.name,
       phone: data.phone ?? "",
+      address: data.address ?? null,
     }),
     delete: (id: number) => API.delete(`/suppliers/${id}`),
   },

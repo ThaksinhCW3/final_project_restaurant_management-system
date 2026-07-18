@@ -17,6 +17,7 @@ type CustomerPageProps = {
   submitOrder: (sessionId: string, items: Array<{ id: number; qty: number; note?: string | null }>) => void | Promise<void>;
   requestPayment: (sessionId: string) => void | Promise<void>;
   requestCancellation: (sessionId: string, reason: string) => void | Promise<void>;
+  doneOrderLines: Record<string, string[]>;
 };
 
 type Tab = "home" | "menu" | "cart" | "offers" | "profile";
@@ -65,6 +66,7 @@ export default function CustomerPage({
   submitOrder,
   requestPayment,
   requestCancellation,
+  doneOrderLines,
 }: CustomerPageProps) {
   const [tab, setTab] = useState<Tab>("home");
   const [search, setSearch] = useState("");
@@ -95,6 +97,11 @@ export default function CustomerPage({
       return [];
     }
   });
+
+  useEffect(() => {
+  document.title = `ຮ້ານໂອເລ້ເຂົ້າຊອຍ - ໂຕເລກທີ ${session?.tableNumber ?? billId}`;
+}, [session?.tableNumber, billId]);
+
   const waitingPayment = session?.status === "pending_payment";
   const orderSubmitted = Boolean(session?.orderStatus || waitingPayment);
   const orderReceived = session?.orderStatus === "ready" || waitingPayment;
@@ -311,6 +318,12 @@ export default function CustomerPage({
     .filter((item): item is CustomerCartLine & { menuItem: MenuItem } => Boolean(item.menuItem));
   const cartCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
   const total = cartItems.reduce((sum, item) => sum + item.unitPrice * item.qty, 0);
+  const orderLineKey = (menuId: number, note?: string | null) =>
+    `${menuId}:${String(note ?? "").trim()}`;
+  const isCartLineDone = (line: CustomerCartLine) =>
+    Boolean(session?.orderStatus === "ready" || (session && (doneOrderLines[session.id] ?? []).includes(orderLineKey(line.menuId, line.serverNote ?? line.note))));
+  const canEditCartLine = (line: CustomerCartLine) =>
+    Boolean(session && !waitingPayment && !cancellationPending && !isCartLineDone(line));
 
   if (sessionMissing) {
     return (
@@ -626,14 +639,14 @@ export default function CustomerPage({
                   {cartItems.map((item) => (
                     <div
                       key={item.key}
-                      className={`customer-mobile-cart-row ${orderSubmitted ? "is-locked" : ""}`}
-                      role={orderSubmitted ? undefined : "button"}
-                      tabIndex={orderSubmitted ? -1 : 0}
+                      className={`customer-mobile-cart-row ${canEditCartLine(item) ? "" : "is-locked"}`}
+                      role={canEditCartLine(item) ? "button" : undefined}
+                      tabIndex={canEditCartLine(item) ? 0 : -1}
                       onClick={() => {
-                        if (!orderSubmitted) openCartLineDetail(item);
+                        if (canEditCartLine(item)) openCartLineDetail(item);
                       }}
                       onKeyDown={(event) => {
-                        if (!orderSubmitted && (event.key === "Enter" || event.key === " ")) {
+                        if (canEditCartLine(item) && (event.key === "Enter" || event.key === " ")) {
                           event.preventDefault();
                           openCartLineDetail(item);
                         }
@@ -656,9 +669,9 @@ export default function CustomerPage({
                         )}
                         {item.note && <small className="customer-mobile-cart-note">ໝາຍເຫດ: {item.note}</small>}
                         <small>{kip(item.unitPrice)}</small>
-                        {orderStatus && orderSubmitted && !cartDraftDirty && (
-                          <span className={`customer-mobile-item-status is-${orderStatus.tone}`}>
-                            {orderStatus.label}
+                        {orderSubmitted && !cartDraftDirty && (
+                          <span className={`customer-mobile-item-status is-${isCartLineDone(item) ? "ready" : "preparing"}`}>
+                            {isCartLineDone(item) ? "ໄດ້ຮັບແລ້ວ" : "ກຳລັງກະກຽມອາຫານ"}
                           </span>
                         )}
                       </div>

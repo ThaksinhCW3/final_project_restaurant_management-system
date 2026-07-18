@@ -1111,7 +1111,7 @@
 
 .customer-detail {
   width: min(520px, 100%);
-  height: min(760px, calc(100vh - 34px));
+  height: auto;
   max-height: calc(100vh - 34px);
   box-sizing: border-box;
   position: relative;
@@ -1180,6 +1180,8 @@
 }
 
 .customer-detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
   gap: 20px;
   padding: 22px 20px 24px;
@@ -1454,7 +1456,6 @@
 
 @media (max-width: 390px) {
   .customer-detail {
-    height: calc(100vh - 28px);
     max-height: calc(100vh - 28px);
   }
 

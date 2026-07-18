@@ -1131,6 +1131,11 @@
   padding: 12px;
 }
 
+.pos-bill-item.is-done {
+  border-color: rgba(21, 144, 109, 0.28);
+  background: linear-gradient(180deg, #ffffff 0%, #f3fbf7 100%);
+}
+
 .pos-bill-item-edit {
   grid-column: 1 / 3;
   min-width: 0;
@@ -1215,6 +1220,22 @@
   line-height: 1.35;
 }
 
+.pos-bill-item-info .pos-bill-item-status {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+
+.pos-bill-item-info .pos-bill-item-status.is-preparing {
+  background: #fff2d8;
+  color: #8a5600;
+}
+
+.pos-bill-item-info .pos-bill-item-status.is-ready {
+  background: #e2f5eb;
+  color: #16704a;
+}
+
 .pos-bill-item-info span {
   color: #121212;
   font-size: 12px;
@@ -1225,6 +1246,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .pos-bill-qty button {
@@ -1237,6 +1260,17 @@
   background: #fff8f8;
   color: #d32f2f;
   cursor: pointer;
+}
+
+.pos-bill-qty .pos-line-done-button {
+  border-color: rgba(21, 144, 109, 0.32);
+  background: #f3fbf7;
+  color: #15906d;
+}
+
+.pos-bill-qty .pos-line-done-button.is-done {
+  background: #15906d;
+  color: #ffffff;
 }
 
 .pos-bill-qty span {

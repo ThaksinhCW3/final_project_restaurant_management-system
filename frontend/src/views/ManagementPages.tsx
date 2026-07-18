@@ -1,4 +1,4 @@
-import { CalendarDays, Check, Download, ExternalLink, Plus, Pencil, Printer, RotateCcw, Trash2, Truck, X, Image as ImageIcon } from "lucide-react";
+import { AlertTriangle, CalendarDays, Check, Download, ExternalLink, Plus, Pencil, Printer, RotateCcw, Trash2, Truck, X, Image as ImageIcon } from "lucide-react";
 import { useState } from "react";
 import type { CSSProperties, Dispatch, SetStateAction } from "react";
 import { Btn, Modal } from "../components/SharedUI";
@@ -316,10 +316,10 @@ export function MenuView({
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: C.gold || "gold" }}>{kip(item.price)}</span>
-                <span style={{ fontSize: 11, color: item.ok ? C.green || "green" : C.textDim || "#666", padding: "4px 8px", borderRadius: 999, background: item.ok ? "rgba(74,140,69,0.12)" : "rgba(90,90,90,0.08)" }}>{item.ok ? "ເປີດ" : "ປິດ"}</span>
+                <span style={{ fontSize: 11, color: item.ok ? C.green || "green" : C.textDim || "#666", padding: "4px 8px", borderRadius: 999, background: item.ok ? "rgba(74,140,69,0.12)" : "rgba(90,90,90,0.08)" }}>{item.ok ? "ເປີດ" : "ໝົດ"}</span>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="menu-action-btn" onClick={() => toggleOk(item.id)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text }}>{item.ok ? "ປິດ" : "ເປີດ"}</button>
+                <button className="menu-action-btn" onClick={() => toggleOk(item.id)} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text }}>{item.ok ? "ໝົດ" : "ເປີດ"}</button>
                 <button className="menu-action-btn" onClick={() => setModal({ type: "menu-form", title: "ແກ້ໄຂເມນູ", data: { ...item, price: String(item.price), image: item.image ?? "", originalImage: item.image ?? "", optionGroups: item.optionGroups ?? [], recipeItems: recipes.filter((recipe) => recipe.menuId === item.id).map((recipe) => ({ id: recipe.id, ingredientId: recipe.ingredientId, quantityUsed: String(recipe.quantityUsed) })) } })} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><Pencil size={14} /> ແກ້ໄຂ</button>
                 <button className="menu-action-btn menu-delete-btn" onClick={() => deleteMenu(item.id, item.name)} style={{ width: 38, background: "rgba(208,64,48,0.12)", border: "1px solid rgba(208,64,48,0.3)", borderRadius: 10, color: C.red || "red", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={14} /></button>
               </div>
@@ -358,7 +358,7 @@ export function StockView({
   const [selectedPurchaseIds, setSelectedPurchaseIds] = useState<number[]>([]);
   const [purchaseDrafts, setPurchaseDrafts] = useState<Record<number, PurchaseDraft>>({});
   const visibleStock = stock.filter((r) => stockFilter === "all" || r.cur <= r.min);
-  const purchaseStockItems = [...stock].sort((a, b) => {
+  const purchaseStockItems = stock.filter((item) => item.cur <= item.min).sort((a, b) => {
     const aLow = a.cur <= a.min;
     const bLow = b.cur <= b.min;
     if (aLow !== bLow) return aLow ? -1 : 1;
@@ -492,30 +492,32 @@ export function StockView({
       },
     });
   };
-  const chipStyle = (active: boolean): CSSProperties => ({
+  const chipStyle = (active: boolean, tone: "green" | "red" = "red"): CSSProperties => ({
     display: "inline-flex",
     alignItems: "center",
     gap: 8,
-    padding: "8px 13px",
+    minHeight: 30,
+    padding: "6px 10px",
     borderRadius: 999,
-    border: `1px solid ${active ? "rgba(211,47,47,0.45)" : C.border}`,
-    background: active ? "rgba(211,47,47,0.10)" : C.card,
-    color: active ? C.red : C.text,
+    border: `1px solid ${active ? (tone === "green" ? "rgba(25,135,84,0.42)" : "rgba(211,47,47,0.45)") : C.border}`,
+    background: active ? (tone === "green" ? "#15966c" : "rgba(211,47,47,0.10)") : C.card,
+    color: active ? (tone === "green" ? "#fff" : C.red) : C.textMid,
     fontWeight: 700,
     cursor: "pointer",
-    boxShadow: active ? "0 8px 18px rgba(211,47,47,0.08)" : "0 6px 16px rgba(35,10,10,0.04)",
+    fontFamily: "var(--sans)",
+    fontSize: 12,
+    boxShadow: "0 3px 10px rgba(60,20,20,0.05)",
   });
-  const countStyle = (active: boolean): CSSProperties => ({
-    minWidth: 26,
-    height: 22,
-    padding: "0 8px",
+  const countStyle = (active: boolean, tone: "green" | "red" = "red"): CSSProperties => ({
+    minWidth: active && tone === "green" ? 28 : 20,
+    padding: active && tone === "green" ? "2px 8px" : "1px 6px",
     borderRadius: 999,
-    background: active ? "#fff" : C.card2,
-    color: active ? C.red : C.textDim,
+    background: active && tone === "green" ? "rgba(255,255,255,0.18)" : C.card2,
+    color: active && tone === "green" ? "#fff" : C.textDim,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 800,
   });
   const dotStyle = (color: string): CSSProperties => ({
@@ -546,18 +548,17 @@ export function StockView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 14, color: C.textMid }}>ຄັງສິນຄ້າ</div>
-          <button onClick={() => setStockFilter("all")} style={chipStyle(stockFilter === "all")}>
-            <span style={dotStyle(C.green)} />
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", maxWidth: 560 }}>
+          <button onClick={() => setStockFilter("all")} style={chipStyle(stockFilter === "all", "green")}>
+            {stockFilter === "all" ? <Check size={14} /> : <span style={dotStyle(C.green)} />}
             <span>ທັງໝົດ</span>
-            <span style={countStyle(stockFilter === "all")}>{stock.length}</span>
+            <span style={countStyle(stockFilter === "all", "green")}>{stock.length}</span>
           </button>
-          <button onClick={() => setStockFilter("low")} style={chipStyle(stockFilter === "low")}>
+          <button onClick={() => setStockFilter("low")} style={chipStyle(stockFilter === "low", "red")}>
             <span style={dotStyle(C.red)} />
             <span>ຕ່ຳ</span>
-            <span style={countStyle(stockFilter === "low")}>{lowStockCount}</span>
+            <span style={countStyle(stockFilter === "low", "red")}>{lowStockCount}</span>
           </button>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginLeft: "auto" }}>
@@ -728,13 +729,15 @@ export function StockView({
         </Modal>
       )}
       {purchaseStep === "select" && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, padding: 16, display: "grid", gap: 14 }}>
+        <Modal title="ເລືອກສິນຄ້າສັ່ງຊື້" onClose={resetPurchaseFlow} width={1280}>
+          <div style={{ display: "grid", gap: 14 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div>
-              <div style={{ color: C.text, fontSize: 15, fontWeight: 800 }}>ເລືອກສິນຄ້າສັ່ງຊື້</div>
-              <div style={{ color: C.textDim, fontSize: 12 }}>ສິນຄ້າຕ່ຳຈະຢູ່ຂ້າງເທິງ · {selectedPurchaseItems.length} ລາຍການຖືກເລືອກ</div>
+              <div style={{ color: C.textDim, fontSize: 12 }}>
+                ສະແດງສະເພາະສິນຄ້າທີ່ຈຳນວນຕ່ຳກວ່າ ຫຼື ເທົ່າກັບຂັ້ນຕ່ຳ · {selectedPurchaseItems.length} ລາຍການຖືກເລືອກ
+              </div>
             </div>
-            <Btn variant="secondary" onClick={resetPurchaseFlow}>ຍົກເລີກ</Btn>
+            <Btn variant="secondary" onClick={resetPurchaseFlow}>ຣິເຊັດ</Btn>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 12 }}>
             {purchaseStockItems.map((item) => {
@@ -773,7 +776,7 @@ export function StockView({
             })}
             {purchaseStockItems.length === 0 && (
               <div style={{ color: C.textDim, border: `1px dashed ${C.borderMid}`, borderRadius: 12, padding: 18 }}>
-                ບໍ່ມີສິນຄ້າໃນຄັງ
+                ບໍ່ມີສິນຄ້າທີ່ຕ່ຳກວ່າຂັ້ນຕ່ຳ
               </div>
             )}
           </div>
@@ -786,10 +789,12 @@ export function StockView({
               ຖັດໄປ
             </Btn>
           </div>
-        </div>
+          </div>
+        </Modal>
       )}
-      {purchaseStep === "review" ? (
-        <div style={{ display: "grid", gap: 16 }}>
+      {purchaseStep === "review" && (
+        <Modal title="ຮ່າງສັ່ງຊື້" onClose={resetPurchaseFlow} width={1280}>
+          <div style={{ display: "grid", gap: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>
               <div style={{ color: C.textMid, fontSize: 13 }}>ຮ່າງສັ່ງຊື້</div>
@@ -856,9 +861,10 @@ export function StockView({
               </div>
             ))}
           </div>
-        </div>
-      ) : (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflowX: "auto", overflowY: "hidden" }}>
+          </div>
+        </Modal>
+      )}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 15, overflowX: "auto", overflowY: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "64px 1fr 80px 70px 80px 120px 140px 1fr", padding: "14px 16px", gap: 10, fontSize: 11, color: C.textMid, textTransform: "uppercase", minWidth: 940 }}>
             <span>ຮູບ</span><span>ສິນຄ້າ</span><span>ຈຳນວນ</span><span>ຫົວໜ່ວຍ</span><span>ຕ່ຳສຸດ</span><span>ຕົ້ນທຶນ</span><span>ຜູ້ສະໜອງ</span><span>ການຈັດການ</span>
           </div>
@@ -874,7 +880,10 @@ export function StockView({
                   )}
                 </div>
                 <span style={{ fontSize: 13, color: C.text }}>{r.name}</span>
-                <span style={{ fontSize: 14, fontWeight: 600, color: low ? C.red : C.text }}>{r.cur}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: low ? C.red : C.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {low && <AlertTriangle size={14} />}
+                  {r.cur}
+                </span>
                 <span style={{ fontSize: 12, color: C.textDim }}>{r.unit}</span>
                 <span style={{ fontSize: 12, color: C.textDim }}>{r.min}</span>
                 <span style={{ fontSize: 12, color: C.textDim }}>{kip(r.costPerUnit ?? 0)}</span>
@@ -886,8 +895,7 @@ export function StockView({
               </div>
             );
           })}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

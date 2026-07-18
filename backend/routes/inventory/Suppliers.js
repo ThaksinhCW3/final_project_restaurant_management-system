@@ -13,9 +13,9 @@ module.exports = (pool) => {
     
 //ADD supplier
     router.post('/', (req, res) => {
-        const { supplier_name, phone, address } = req.body;
-        const query = 'INSERT INTO suppliers (supplier_name, phone, address) VALUES (?, ?, ?)';
-        pool.query(query, [supplier_name, phone, address], (err, result) => {
+        const { supplier_name, phone } = req.body;
+        const query = 'INSERT INTO suppliers (supplier_name, phone) VALUES (?, ?)';
+        pool.query(query, [supplier_name, phone], (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
             res.status(201).json({ message: "Supplier added successfully!", supplier_id: result.insertId });
         });
@@ -27,9 +27,9 @@ module.exports = (pool) => {
         if (!Number.isInteger(Number(id))) {
             return res.status(400).json({ message: 'Invalid supplier id' });
         }
-        const query = 'UPDATE suppliers SET supplier_name = ?, phone = ?, address = ? WHERE supplier_id = ?';
-        const { supplier_name, phone, address } = req.body;
-        pool.query(query, [supplier_name, phone, address, id], (err, result) => {
+        const query = 'UPDATE suppliers SET supplier_name = ?, phone = ? WHERE supplier_id = ?';
+        const { supplier_name, phone } = req.body;
+        pool.query(query, [supplier_name, phone, id], (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
             if (result.affectedRows === 0){
                 return res.status(404).json({ message: "Supplier not found" });
