@@ -309,6 +309,7 @@ export default function CustomerPage({
     orderSubmitted &&
     cartDraftDirty &&
     cartLineSignature(cartLines) !== cartLineSignature(sessionCartLines);
+  const paymentRequestAvailable = Boolean(orderReceived && !hasPendingOrderUpdate && !cancellationPending);
   const displayCartLines = orderSubmitted && !cartDraftDirty ? sessionCartLines : cartLines;
   const cartItems: Array<CustomerCartLine & { menuItem: MenuItem }> = displayCartLines
     .map((item) => ({
@@ -745,6 +746,7 @@ export default function CustomerPage({
                       <button
                         type="button"
                         className="customer-cancel-order"
+                        disabled={paymentRequestAvailable}
                         onClick={openCancellationDialog}
                       >
                         ຂໍຍົກເລີກອໍເດີ

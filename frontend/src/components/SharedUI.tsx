@@ -67,7 +67,7 @@ interface ModalProps {
 export function Modal({ title, onClose, children, width = 480 }: ModalProps) {
   return (
     <div className="shared-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2200, padding: 20 }}>
       <div className="shared-modal-card" style={{ background: C.card, border: `1px solid ${C.borderMid}`, borderRadius: 18, width, maxWidth: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 22px", borderBottom: `1px solid ${C.border}` }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "var(--heading)" }}>{title}</span>
